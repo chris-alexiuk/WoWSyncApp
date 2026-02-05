@@ -1,6 +1,29 @@
 node_modules
 dist
 release
+
+# Logs
 npm-debug.log*
-.DS_Store
+yarn-debug.log*
+yarn-error.log*
 *.log
+
+# OS files
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Environment
+.env
+.env.local
+
+# Electron build artifacts
+*.blockmap
+latest*.yml
