@@ -1,6 +1,13 @@
 import path from 'node:path';
 import chokidar, { type FSWatcher } from 'chokidar';
 import type { AppConfig, PreflightResult, SyncRunResult, SyncState } from '../shared/types';
+import {
+  MAX_LOG_LINES,
+  MIN_SYNC_INTERVAL_SECONDS,
+  WATCHER_DEBOUNCE_MS,
+  WATCHER_STABILITY_THRESHOLD_MS,
+  WATCHER_POLL_INTERVAL_MS,
+} from '../shared/constants';
 import { GitSyncEngine } from './gitSyncEngine';
 
 type Listener = (state: SyncState) => void;
@@ -43,7 +50,7 @@ export class SyncService {
     this.clearDebounce();
 
     this.state.running = true;
-    this.pushLog(`Auto-sync enabled (${Math.max(config.syncIntervalSeconds, 10)}s interval).`);
+    this.pushLog(`Auto-sync enabled (${Math.max(config.syncIntervalSeconds, MIN_SYNC_INTERVAL_SECONDS)}s interval).`);
     this.emit();
 
     void this.runNow(config);
@@ -52,7 +59,7 @@ export class SyncService {
       if (this.activeConfig) {
         void this.runNow(this.activeConfig);
       }
-    }, Math.max(config.syncIntervalSeconds, 10) * 1000);
+    }, Math.max(config.syncIntervalSeconds, MIN_SYNC_INTERVAL_SECONDS) * 1000);
 
     this.startSourceWatcher(config);
   }
@@ -161,8 +168,8 @@ export class SyncService {
     this.watcher = chokidar.watch(watchPaths, {
       ignoreInitial: true,
       awaitWriteFinish: {
-        stabilityThreshold: 900,
-        pollInterval: 120,
+        stabilityThreshold: WATCHER_STABILITY_THRESHOLD_MS,
+        pollInterval: WATCHER_POLL_INTERVAL_MS,
       },
     });
 
@@ -184,7 +191,7 @@ export class SyncService {
         if (this.activeConfig) {
           void this.runNow(this.activeConfig);
         }
-      }, 1800);
+      }, WATCHER_DEBOUNCE_MS);
     });
 
     this.watcher.on('error', (error) => {
@@ -221,7 +228,7 @@ export class SyncService {
   }
 
   private pushLog(line: string): void {
-    this.state.logs = [`[${new Date().toLocaleTimeString()}] ${line}`, ...this.state.logs].slice(0, 140);
+    this.state.logs = [`[${new Date().toLocaleTimeString()}] ${line}`, ...this.state.logs].slice(0, MAX_LOG_LINES);
   }
 
   private emit(): void {

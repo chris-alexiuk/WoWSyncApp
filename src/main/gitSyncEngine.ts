@@ -4,19 +4,17 @@ import fs from 'fs-extra';
 import { app } from 'electron';
 import simpleGit, { type SimpleGit } from 'simple-git';
 import type { AppConfig, PreflightIssue, PreflightResult } from '../shared/types';
-
-const ADDONS_SUBDIR = 'addons';
-const PROFILES_SUBDIR = 'profiles';
-const CLIENT_BACKUPS_SUBDIR = 'client-backups';
-const CLIENT_BACKUP_META_FILE = 'backup-meta.json';
-const META_FILE_NAME = '.wow-sync-meta.json';
-const MAX_CLIENT_BACKUPS = 3;
-const WINDOWS_GIT_CANDIDATES = [
-  'C:\\Program Files\\Git\\cmd\\git.exe',
-  'C:\\Program Files\\Git\\bin\\git.exe',
-  'C:\\Program Files (x86)\\Git\\cmd\\git.exe',
-  'C:\\Program Files (x86)\\Git\\bin\\git.exe',
-];
+import {
+  ADDONS_SUBDIR,
+  PROFILES_SUBDIR,
+  CLIENT_BACKUPS_SUBDIR,
+  CLIENT_BACKUP_META_FILE,
+  META_FILE_NAME,
+  MAX_CLIENT_BACKUPS,
+  WINDOWS_GIT_CANDIDATES,
+  GIT_SPAWN_TIMEOUT_MS,
+  GIT_REACHABILITY_TIMEOUT_MS,
+} from '../shared/constants';
 
 type LogFn = (line: string) => void;
 
@@ -361,7 +359,7 @@ export class GitSyncEngine {
     try {
       const result = spawnSync(binaryPath, ['--version'], {
         windowsHide: true,
-        timeout: 3000,
+        timeout: GIT_SPAWN_TIMEOUT_MS,
       });
 
       return result.status === 0;
@@ -668,7 +666,7 @@ export class GitSyncEngine {
     try {
       const result = spawnSync(gitBinary, ['ls-remote', authRepoUrl, 'HEAD'], {
         windowsHide: true,
-        timeout: 7000,
+        timeout: GIT_REACHABILITY_TIMEOUT_MS,
       });
 
       if (result.status === 0) {
