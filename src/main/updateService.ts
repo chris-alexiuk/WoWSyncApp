@@ -1,6 +1,7 @@
 import { app } from 'electron';
 import { autoUpdater, type ProgressInfo, type UpdateInfo } from 'electron-updater';
 import type { AppUpdateState } from '../shared/types';
+import { MAX_RELEASE_NOTES_LENGTH } from '../shared/constants';
 
 const LATEST_RELEASE_URL = 'https://github.com/chris-alexiuk/WoWSyncApp/releases/latest';
 
@@ -18,7 +19,7 @@ function summarizeNotes(notes?: string): string | null {
     return null;
   }
 
-  return trimmed.length > 1000 ? `${trimmed.slice(0, 1000)}...` : trimmed;
+  return trimmed.length > MAX_RELEASE_NOTES_LENGTH ? `${trimmed.slice(0, MAX_RELEASE_NOTES_LENGTH)}...` : trimmed;
 }
 
 function normalizeReleaseNotes(releaseNotes: UpdateInfo['releaseNotes']): string | null {
