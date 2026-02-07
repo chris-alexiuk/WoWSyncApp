@@ -4,6 +4,7 @@ import fs from 'fs-extra';
 import { app } from 'electron';
 import simpleGit, { type SimpleGit } from 'simple-git';
 import type { AppConfig, PreflightIssue, PreflightResult } from '../shared/types';
+import { ConfigError, GitError, TrustError, PathError } from '../shared/errors';
 import {
   ADDONS_SUBDIR,
   PROFILES_SUBDIR,
@@ -211,29 +212,29 @@ export class GitSyncEngine {
 
   async restoreLatestClientBackup(config: AppConfig, log: LogFn): Promise<string> {
     if (config.mode !== 'client') {
-      throw new Error('Rollback is available only in client mode.');
+      throw new ConfigError('Rollback is available only in client mode.');
     }
 
     if (!config.targetAddonsPath.trim()) {
-      throw new Error('Client addons folder is required for rollback.');
+      throw new PathError('Client addons folder is required for rollback.');
     }
 
     const backupRoot = this.getClientBackupRootPath(config);
     if (!(await fs.pathExists(backupRoot))) {
-      throw new Error('No rollback snapshots are available yet.');
+      throw new PathError('No rollback snapshots are available yet.');
     }
 
     const snapshots = await this.listBackupSnapshots(backupRoot);
     const latestSnapshot = snapshots[0];
 
     if (!latestSnapshot) {
-      throw new Error('No rollback snapshots are available yet.');
+      throw new PathError('No rollback snapshots are available yet.');
     }
 
     const snapshotPath = path.join(backupRoot, latestSnapshot);
     const backupAddonsPath = path.join(snapshotPath, ADDONS_SUBDIR);
     if (!(await fs.pathExists(backupAddonsPath))) {
-      throw new Error(`Rollback snapshot ${latestSnapshot} is missing addons data.`);
+      throw new PathError(`Rollback snapshot ${latestSnapshot} is missing addons data.`);
     }
 
     log(`Restoring addons from snapshot ${latestSnapshot}...`);
@@ -255,27 +256,27 @@ export class GitSyncEngine {
 
   private validateConfig(config: AppConfig): void {
     if (config.profileSyncPreset === 'addons_only' && config.syncProfiles) {
-      throw new Error("Profile preset is 'AddOns only' but profile sync is enabled.");
+      throw new ConfigError("Profile preset is 'AddOns only' but profile sync is enabled.");
     }
 
     if (config.profileSyncPreset !== 'addons_only' && !config.syncProfiles) {
-      throw new Error('Profile preset requires profile sync to be enabled.');
+      throw new ConfigError('Profile preset requires profile sync to be enabled.');
     }
 
     if (!config.repoUrl.trim()) {
-      throw new Error('Repository URL is required.');
+      throw new ConfigError('Repository URL is required.');
     }
 
     if (!config.branch.trim()) {
-      throw new Error('Branch is required.');
+      throw new ConfigError('Branch is required.');
     }
 
     if (config.mode === 'source' && !config.sourceAddonsPath.trim()) {
-      throw new Error('Source addons folder is required in source mode.');
+      throw new ConfigError('Source addons folder is required in source mode.');
     }
 
     if (config.mode === 'source' && config.syncProfiles && !config.sourceProfilesPath.trim()) {
-      throw new Error('Source profiles folder is required when profile sync is enabled.');
+      throw new ConfigError('Source profiles folder is required when profile sync is enabled.');
     }
 
     if (
@@ -284,17 +285,17 @@ export class GitSyncEngine {
       config.profileSyncPreset === 'account_saved_variables' &&
       !this.isLikelySavedVariablesPath(config.sourceProfilesPath)
     ) {
-      throw new Error(
+      throw new ConfigError(
         "Account SavedVariables preset requires source profile path to point at a SavedVariables folder.",
       );
     }
 
     if (config.mode === 'client' && !config.targetAddonsPath.trim()) {
-      throw new Error('Client addons folder is required in client mode.');
+      throw new ConfigError('Client addons folder is required in client mode.');
     }
 
     if (config.mode === 'client' && config.syncProfiles && !config.targetProfilesPath.trim()) {
-      throw new Error('Client profiles folder is required when profile sync is enabled.');
+      throw new ConfigError('Client profiles folder is required when profile sync is enabled.');
     }
 
     if (
@@ -303,7 +304,7 @@ export class GitSyncEngine {
       config.profileSyncPreset === 'account_saved_variables' &&
       !this.isLikelySavedVariablesPath(config.targetProfilesPath)
     ) {
-      throw new Error(
+      throw new ConfigError(
         "Account SavedVariables preset requires client profile path to point at a SavedVariables folder.",
       );
     }
@@ -313,7 +314,7 @@ export class GitSyncEngine {
       !config.requireSignedCommits &&
       config.trustedAuthorEmails.length === 0
     ) {
-      throw new Error(
+      throw new ConfigError(
         'Client trust check requires at least one trusted author email or signed commit enforcement.',
       );
     }
@@ -375,7 +376,7 @@ export class GitSyncEngine {
         return configured;
       }
 
-      throw new Error(
+      throw new GitError(
         `Configured Git binary path is invalid: ${configured}. Set it to a valid git executable.`,
       );
     }
@@ -393,7 +394,7 @@ export class GitSyncEngine {
       }
     }
 
-    throw new Error(
+    throw new GitError(
       "Git executable was not found. Install Git and add it to PATH, or set 'Git Binary Path' (for example: C:\\Program Files\\Git\\cmd\\git.exe).",
     );
   }
@@ -464,7 +465,7 @@ export class GitSyncEngine {
     const sourceAddonsPath = config.sourceAddonsPath.trim();
 
     if (!(await fs.pathExists(sourceAddonsPath))) {
-      throw new Error(`Source addons folder does not exist: ${sourceAddonsPath}`);
+      throw new PathError(`Source addons folder does not exist: ${sourceAddonsPath}`);
     }
 
     const repoAddonsPath = path.join(prepared.repoPath, ADDONS_SUBDIR);
@@ -476,7 +477,7 @@ export class GitSyncEngine {
 
     if (config.syncProfiles) {
       if (!(await fs.pathExists(sourceProfilesPath))) {
-        throw new Error(`Source profiles folder does not exist: ${sourceProfilesPath}`);
+        throw new PathError(`Source profiles folder does not exist: ${sourceProfilesPath}`);
       }
 
       log('Mirroring profile files into sync repository cache...');
@@ -515,7 +516,7 @@ export class GitSyncEngine {
     const targetProfilesPath = config.targetProfilesPath.trim();
 
     if (!prepared.remoteHasBranch) {
-      throw new Error(
+      throw new PathError(
         `Remote branch ${config.branch} does not exist yet. Run source sync first to create it.`,
       );
     }
@@ -529,7 +530,7 @@ export class GitSyncEngine {
 
     const repoAddonsPath = path.join(prepared.repoPath, ADDONS_SUBDIR);
     if (!(await fs.pathExists(repoAddonsPath))) {
-      throw new Error('Sync repository has no addons payload yet.');
+      throw new PathError('Sync repository has no addons payload yet.');
     }
 
     const snapshotName = await this.createClientBackup(config, latestCommit);
@@ -546,7 +547,7 @@ export class GitSyncEngine {
       const repoProfilesPath = path.join(prepared.repoPath, PROFILES_SUBDIR);
 
       if (!(await fs.pathExists(repoProfilesPath))) {
-        throw new Error(
+        throw new PathError(
           'Sync repository has no profiles payload yet. Run source sync with profiles enabled first.',
         );
       }
@@ -722,7 +723,7 @@ export class GitSyncEngine {
       .filter(Boolean);
 
     if (rows.length === 0) {
-      throw new Error('No commits found in sync branch.');
+      throw new TrustError('No commits found in sync branch.');
     }
 
     const allowlist = config.trustedAuthorEmails
@@ -735,13 +736,13 @@ export class GitSyncEngine {
       const signatureStatus = (signatureStatusRaw ?? '').trim();
 
       if (allowlist.length > 0 && !allowlist.includes(email)) {
-        throw new Error(
+        throw new TrustError(
           `Commit ${hash.slice(0, 8)} is authored by ${email}, which is not in trusted author list.`,
         );
       }
 
       if (config.requireSignedCommits && !['G', 'U'].includes(signatureStatus)) {
-        throw new Error(
+        throw new TrustError(
           `Commit ${hash.slice(0, 8)} has signature state '${signatureStatus || '?'}'.`,
         );
       }
