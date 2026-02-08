@@ -170,10 +170,17 @@ export class GitSyncEngine {
       log('Cloning sync repository into local cache...');
       await fs.ensureDir(path.dirname(repoPath));
       await fs.remove(repoPath);
-      await simpleGit({ binary: gitBinary }).clone(authRepoUrl, repoPath);
+      await simpleGit({
+        binary: gitBinary,
+        unsafe: { allowUnsafeCustomBinary: true },
+      }).clone(authRepoUrl, repoPath);
     }
 
-    const git = simpleGit({ baseDir: repoPath, binary: gitBinary });
+    const git = simpleGit({
+      baseDir: repoPath,
+      binary: gitBinary,
+      unsafe: { allowUnsafeCustomBinary: true },
+    });
 
     await git.remote(['set-url', 'origin', authRepoUrl]);
     await git.fetch('origin');
