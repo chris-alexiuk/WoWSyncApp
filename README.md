@@ -27,8 +27,8 @@ Electron desktop app for syncing World of Warcraft addon folders across multiple
 ## Local development
 
 ```bash
-npm install
-npm run dev
+bun install
+bun run dev
 ```
 
 If package install fails in restricted environments, run development commands on a machine with npm registry access.
@@ -36,8 +36,8 @@ If package install fails in restricted environments, run development commands on
 ## Build and run
 
 ```bash
-npm run build
-npm run start
+bun run build
+bun run start
 ```
 
 ## Security model (v0)
