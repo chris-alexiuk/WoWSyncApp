@@ -3,6 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "description": "Desktop sync app for WoW addons across machines",
+  "author": {
+    "name": "Chris Alexiuk"
+  },
   "packageManager": "bun@1.3.5",
   "main": "dist/main/main.js",
   "scripts": {
@@ -10,11 +13,16 @@
     "dev:renderer": "vite",
     "dev:main": "tsc -p tsconfig.node.json --watch --preserveWatchOutput",
     "dev:electron": "wait-on tcp:5173 dist/main/main.js && cross-env VITE_DEV_SERVER_URL=http://localhost:5173 nodemon --watch dist/main --watch dist/preload --ext js --exec \"electron dist/main/main.js\"",
-    "build": "npm run build:renderer && npm run build:main",
+    "build": "bun run build:renderer && bun run build:main",
     "build:renderer": "vite build",
     "build:main": "tsc -p tsconfig.node.json",
     "typecheck": "tsc --noEmit && tsc -p tsconfig.node.json --noEmit",
-    "start": "electron dist/main/main.js"
+    "start": "electron dist/main/main.js",
+    "pack": "bun run build && electron-builder --dir",
+    "dist": "bun run build && electron-builder",
+    "dist:linux": "bun run build && electron-builder --linux AppImage tar.gz",
+    "dist:win": "bun run build && electron-builder --win portable zip",
+    "dist:win:installer": "bun run build && electron-builder --win nsis"
   },
   "dependencies": {
     "chokidar": "^4.0.3",
@@ -32,9 +40,41 @@
     "concurrently": "^9.1.2",
     "cross-env": "^7.0.3",
     "electron": "^35.0.0",
+    "electron-builder": "^26.0.12",
     "nodemon": "^3.1.9",
     "typescript": "^5.7.3",
     "vite": "^6.1.0",
     "wait-on": "^8.0.2"
+  },
+  "build": {
+    "appId": "com.chrisalexiuk.wowsync",
+    "productName": "WoW Sync App",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "package.json"
+    ],
+    "asar": true,
+    "linux": {
+      "target": [
+        "AppImage",
+        "tar.gz"
+      ],
+      "category": "Utility"
+    },
+    "win": {
+      "target": [
+        "portable",
+        "zip"
+      ],
+      "signAndEditExecutable": false
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    },
+    "artifactName": "${productName}-${version}-${os}-${arch}.${ext}"
   }
 }

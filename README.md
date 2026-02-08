@@ -40,6 +40,17 @@ bun run build
 bun run start
 ```
 
+## Package release binaries
+
+```bash
+bun run dist:linux
+bun run dist:win
+```
+
+Artifacts are written to `release/`.
+
+`bun run dist:win:installer` builds an NSIS installer, but on Linux it typically requires `wine`.
+
 ## Security model (v0)
 
 - Repository should be private.
