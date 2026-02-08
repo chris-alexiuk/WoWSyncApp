@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import type { AppConfig, SyncMode, SyncState } from '../shared/types';
+import type { AppConfig, SyncMode, SyncState, UpdateCheckResult } from '../shared/types';
 
 const EMPTY_STATE: SyncState = {
   running: false,
@@ -27,6 +27,8 @@ export function App(): JSX.Element {
   const [state, setState] = useState<SyncState>(EMPTY_STATE);
   const [saving, setSaving] = useState(false);
   const [status, setStatus] = useState('Loading config...');
+  const [updateState, setUpdateState] = useState<UpdateCheckResult | null>(null);
+  const [checkingUpdates, setCheckingUpdates] = useState(false);
 
   useEffect(() => {
     let unsubscribe = () => {};
@@ -40,6 +42,28 @@ export function App(): JSX.Element {
         setState(initialState);
         setStatus('Ready');
         unsubscribe = window.wowSync.onState((next) => setState(next));
+
+        void (async () => {
+          setCheckingUpdates(true);
+
+          try {
+            const updateResult = await window.wowSync.checkForAppUpdate();
+            setUpdateState(updateResult);
+          } catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            setUpdateState({
+              currentVersion: 'unknown',
+              latestVersion: null,
+              hasUpdate: false,
+              releaseUrl: null,
+              publishedAt: null,
+              notes: null,
+              message: `Update check failed: ${message}`,
+            });
+          } finally {
+            setCheckingUpdates(false);
+          }
+        })();
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         setStatus(`Failed to load config: ${message}`);
@@ -159,6 +183,36 @@ export function App(): JSX.Element {
     }
   };
 
+  const checkForUpdates = async () => {
+    setCheckingUpdates(true);
+
+    try {
+      const result = await window.wowSync.checkForAppUpdate();
+      setUpdateState(result);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      setUpdateState({
+        currentVersion: 'unknown',
+        latestVersion: null,
+        hasUpdate: false,
+        releaseUrl: null,
+        publishedAt: null,
+        notes: null,
+        message: `Update check failed: ${message}`,
+      });
+    } finally {
+      setCheckingUpdates(false);
+    }
+  };
+
+  const openLatestRelease = async () => {
+    if (!updateState?.releaseUrl) {
+      return;
+    }
+
+    await window.wowSync.openExternalUrl(updateState.releaseUrl);
+  };
+
   const formatDate = (iso: string | null) => {
     if (!iso) {
       return 'Never';
@@ -191,6 +245,43 @@ export function App(): JSX.Element {
             <h3>Mode</h3>
             <p>{modeLabel(mode)}</p>
           </article>
+        </div>
+      </section>
+
+      <section className="panel updates">
+        <header>
+          <h2>App Updates</h2>
+          <p>{updateState?.message ?? 'No update check yet'}</p>
+        </header>
+        <div className="update-grid">
+          <article>
+            <h3>Current Version</h3>
+            <p>{updateState?.currentVersion ? `v${updateState.currentVersion}` : 'Unknown'}</p>
+          </article>
+          <article>
+            <h3>Latest Release</h3>
+            <p>{updateState?.latestVersion ? `v${updateState.latestVersion}` : 'Unknown'}</p>
+          </article>
+          <article>
+            <h3>Published</h3>
+            <p>{formatDate(updateState?.publishedAt ?? null)}</p>
+          </article>
+        </div>
+        {updateState?.notes ? <pre className="update-notes">{updateState.notes}</pre> : null}
+        <div className="actions">
+          <button type="button" onClick={checkForUpdates} disabled={checkingUpdates}>
+            {checkingUpdates ? 'Checking...' : 'Check for Updates'}
+          </button>
+          <button
+            type="button"
+            className="primary"
+            onClick={openLatestRelease}
+            disabled={!updateState?.releaseUrl}
+          >
+            {updateState?.hasUpdate && updateState.latestVersion
+              ? `Download v${updateState.latestVersion}`
+              : 'Open Release Page'}
+          </button>
         </div>
       </section>
 

@@ -58,3 +58,4 @@ If validation fails, sync is aborted and the runtime panel shows the failure rea
 - Auto-sync in source mode also watches file changes and schedules a near-immediate push.
 - v0 mirrors addon folder content as-is (target folder is replaced with synced payload each run).
 - If profile sync is enabled, the profile target folder is also replaced with synced payload each run.
+- The `App Updates` panel can check GitHub for the latest release and open the download page for testers.

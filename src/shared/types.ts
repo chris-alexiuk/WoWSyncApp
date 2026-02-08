@@ -32,3 +32,13 @@ export interface SyncRunResult {
   ok: boolean;
   message: string;
 }
+
+export interface UpdateCheckResult {
+  currentVersion: string;
+  latestVersion: string | null;
+  hasUpdate: boolean;
+  releaseUrl: string | null;
+  publishedAt: string | null;
+  notes: string | null;
+  message: string;
+}

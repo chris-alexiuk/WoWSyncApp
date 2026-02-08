@@ -4,10 +4,12 @@ import {
   app,
   dialog,
   ipcMain,
+  shell,
   type OpenDialogOptions,
 } from 'electron';
 import { loadConfig, saveConfig } from './configStore';
 import { SyncService } from './syncService';
+import { checkForAppUpdate } from './updateService';
 import type { AppConfig, SyncState } from '../shared/types';
 
 let mainWindow: BrowserWindow | null = null;
@@ -59,6 +61,13 @@ function registerIpc(): void {
   });
 
   ipcMain.handle('sync:runNow', async (_event, config: AppConfig) => syncService.runNow(config));
+
+  ipcMain.handle('update:check', async () => checkForAppUpdate());
+
+  ipcMain.handle('shell:openExternal', async (_event, url: string) => {
+    await shell.openExternal(url);
+    return { ok: true };
+  });
 
   ipcMain.handle('dialog:pickDirectory', async (_event, currentPath?: string) => {
     const options: OpenDialogOptions = {
