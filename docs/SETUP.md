@@ -17,6 +17,7 @@ This guide describes one source machine and one or more client machines.
    - GitHub Repository URL
    - Branch
    - GitHub Token
+   - Optional Git Binary Path (set this if Git is not on PATH)
    - Source Addons Folder (`World of Warcraft/_retail_/Interface/AddOns`)
    - Git author name/email
 4. Save config.
@@ -32,6 +33,7 @@ This guide describes one source machine and one or more client machines.
    - Same GitHub Repository URL
    - Same Branch
    - GitHub Token (read access is enough)
+   - Optional Git Binary Path (example: `C:\Program Files\Git\cmd\git.exe`)
    - Client Addons Folder (`World of Warcraft/_retail_/Interface/AddOns`)
 4. Configure trust guardrail:
    - add trusted author email(s), and/or

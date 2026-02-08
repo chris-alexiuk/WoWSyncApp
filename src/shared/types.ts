@@ -6,6 +6,7 @@ export interface AppConfig {
   repoUrl: string;
   branch: string;
   githubToken: string;
+  gitBinaryPath: string;
   sourceAddonsPath: string;
   targetAddonsPath: string;
   syncIntervalSeconds: number;

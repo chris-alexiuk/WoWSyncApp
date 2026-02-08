@@ -77,6 +77,33 @@ function registerIpc(): void {
 
     return result.filePaths[0] ?? '';
   });
+
+  ipcMain.handle('dialog:pickGitBinary', async (_event, currentPath?: string) => {
+    const options: OpenDialogOptions = {
+      title: 'Choose Git Executable',
+      properties: ['openFile'],
+      filters:
+        process.platform === 'win32'
+          ? [
+              {
+                name: 'Executables',
+                extensions: ['exe', 'cmd', 'bat'],
+              },
+            ]
+          : undefined,
+    };
+
+    if (currentPath) {
+      options.defaultPath = currentPath;
+    }
+
+    const result = await dialog.showOpenDialog(mainWindow!, options);
+    if (result.canceled || result.filePaths.length === 0) {
+      return '';
+    }
+
+    return result.filePaths[0] ?? '';
+  });
 }
 
 app.whenReady().then(async () => {

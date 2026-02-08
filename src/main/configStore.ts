@@ -9,6 +9,7 @@ const DEFAULT_CONFIG: AppConfig = {
   repoUrl: '',
   branch: 'development',
   githubToken: '',
+  gitBinaryPath: '',
   sourceAddonsPath: '',
   targetAddonsPath: '',
   syncIntervalSeconds: 30,
