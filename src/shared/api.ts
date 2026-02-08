@@ -1,4 +1,4 @@
-import type { AppConfig, SyncRunResult, SyncState } from './types';
+import type { AppConfig, SyncRunResult, SyncState, UpdateCheckResult } from './types';
 
 export interface WoWSyncApi {
   loadConfig: () => Promise<AppConfig>;
@@ -9,5 +9,7 @@ export interface WoWSyncApi {
   runSyncNow: (config: AppConfig) => Promise<SyncRunResult>;
   pickDirectory: (currentPath?: string) => Promise<string>;
   pickGitBinary: (currentPath?: string) => Promise<string>;
+  checkForAppUpdate: () => Promise<UpdateCheckResult>;
+  openExternalUrl: (url: string) => Promise<{ ok: boolean }>;
   onState: (callback: (state: SyncState) => void) => () => void;
 }
