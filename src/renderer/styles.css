@@ -211,6 +211,12 @@ textarea {
   flex-wrap: wrap;
 }
 
+.inline-warning {
+  margin: 10px 0 0;
+  color: #ffb5b5;
+  font-size: 0.9rem;
+}
+
 button {
   border: 1px solid rgba(255, 255, 255, 0.2);
   border-radius: 12px;

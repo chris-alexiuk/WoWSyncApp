@@ -3,6 +3,7 @@ import type { AppConfig, SyncMode, SyncState } from '../shared/types';
 
 const EMPTY_STATE: SyncState = {
   running: false,
+  inFlight: false,
   lastRunAt: null,
   lastSuccessAt: null,
   lastError: null,
@@ -31,13 +32,18 @@ export function App(): JSX.Element {
     let unsubscribe = () => {};
 
     void (async () => {
-      const initialConfig = await window.wowSync.loadConfig();
-      const initialState = await window.wowSync.getState();
-      setConfig(initialConfig);
-      setTrustedEmailsText(emailsToText(initialConfig.trustedAuthorEmails));
-      setState(initialState);
-      setStatus('Ready');
-      unsubscribe = window.wowSync.onState((next) => setState(next));
+      try {
+        const initialConfig = await window.wowSync.loadConfig();
+        const initialState = await window.wowSync.getState();
+        setConfig(initialConfig);
+        setTrustedEmailsText(emailsToText(initialConfig.trustedAuthorEmails));
+        setState(initialState);
+        setStatus('Ready');
+        unsubscribe = window.wowSync.onState((next) => setState(next));
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        setStatus(`Failed to load config: ${message}`);
+      }
     })();
 
     return () => {
@@ -46,13 +52,22 @@ export function App(): JSX.Element {
   }, []);
 
   const mode = config?.mode ?? 'source';
+  const trustedEmails = useMemo(() => textToEmails(trustedEmailsText), [trustedEmailsText]);
+
+  const trustConfigured = useMemo(() => {
+    if (!config || config.mode !== 'client') {
+      return true;
+    }
+
+    return config.requireSignedCommits || trustedEmails.length > 0;
+  }, [config, trustedEmails]);
 
   const canSave = useMemo(() => {
     if (!config) {
       return false;
     }
 
-    if (!config.repoUrl.trim()) {
+    if (!config.repoUrl.trim() || !config.branch.trim()) {
       return false;
     }
 
@@ -64,8 +79,12 @@ export function App(): JSX.Element {
       return false;
     }
 
+    if (!trustConfigured) {
+      return false;
+    }
+
     return true;
-  }, [config, mode]);
+  }, [config, mode, trustConfigured]);
 
   if (!config) {
     return (
@@ -82,16 +101,14 @@ export function App(): JSX.Element {
     setConfig((prev) => (prev ? { ...prev, ...patch } : prev));
   };
 
-  const saveConfig = async () => {
-    if (!config) {
-      return;
-    }
+  const currentConfig = (): AppConfig => ({
+    ...config,
+    trustedAuthorEmails: trustedEmails,
+  });
 
+  const saveConfig = async () => {
     setSaving(true);
-    const nextConfig: AppConfig = {
-      ...config,
-      trustedAuthorEmails: textToEmails(trustedEmailsText),
-    };
+    const nextConfig = currentConfig();
 
     await window.wowSync.saveConfig(nextConfig);
     setConfig(nextConfig);
@@ -100,28 +117,13 @@ export function App(): JSX.Element {
   };
 
   const runNow = async () => {
-    if (!config) {
-      return;
-    }
-
     setStatus('Running sync...');
-    const result = await window.wowSync.runSyncNow({
-      ...config,
-      trustedAuthorEmails: textToEmails(trustedEmailsText),
-    });
+    const result = await window.wowSync.runSyncNow(currentConfig());
     setStatus(result.message);
   };
 
   const startAutoSync = async () => {
-    if (!config) {
-      return;
-    }
-
-    const nextConfig = {
-      ...config,
-      trustedAuthorEmails: textToEmails(trustedEmailsText),
-    };
-
+    const nextConfig = currentConfig();
     await window.wowSync.saveConfig(nextConfig);
     setConfig(nextConfig);
     await window.wowSync.startSync(nextConfig);
@@ -136,7 +138,7 @@ export function App(): JSX.Element {
   const pickDir = async (field: 'sourceAddonsPath' | 'targetAddonsPath') => {
     const selected = await window.wowSync.pickDirectory(config[field]);
     if (selected) {
-      patchConfig({ [field]: selected });
+      patchConfig({ [field]: selected } as Partial<AppConfig>);
     }
   };
 
@@ -162,7 +164,7 @@ export function App(): JSX.Element {
         <div className="hero-metrics">
           <article>
             <h3>Status</h3>
-            <p>{state.running ? 'Auto-sync ON' : 'Idle'}</p>
+            <p>{state.inFlight ? 'Syncing now' : state.running ? 'Auto-sync ON' : 'Idle'}</p>
           </article>
           <article>
             <h3>Last Success</h3>
@@ -312,15 +314,21 @@ export function App(): JSX.Element {
           />
         </label>
 
+        {!trustConfigured ? (
+          <p className="inline-warning">
+            Configure trusted author emails or enable signed-commit requirement for client mode.
+          </p>
+        ) : null}
+
         <div className="actions">
           <button type="button" className="primary" disabled={!canSave || saving} onClick={saveConfig}>
             {saving ? 'Saving...' : 'Save Config'}
           </button>
-          <button type="button" onClick={startAutoSync} disabled={!canSave}>
+          <button type="button" onClick={startAutoSync} disabled={!canSave || state.inFlight}>
             Start Auto Sync
           </button>
-          <button type="button" onClick={runNow} disabled={!canSave}>
-            Sync Now
+          <button type="button" onClick={runNow} disabled={!canSave || state.inFlight}>
+            {state.inFlight ? 'Syncing...' : 'Sync Now'}
           </button>
           <button type="button" className="ghost" onClick={stopAutoSync}>
             Stop
@@ -344,7 +352,7 @@ export function App(): JSX.Element {
           </article>
           <article>
             <h3>Process</h3>
-            <p>{state.running ? 'Auto mode active' : 'Manual mode'}</p>
+            <p>{state.inFlight ? 'Sync in progress' : state.running ? 'Auto mode active' : 'Manual mode'}</p>
           </article>
         </div>
         <pre className="log-view">{state.logs.join('\n') || 'No logs yet'}</pre>
