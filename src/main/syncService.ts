@@ -141,7 +141,8 @@ export class SyncService {
     });
 
     this.watcher.on('error', (error) => {
-      this.pushLog(`Watcher error: ${error.message}`);
+      const message = error instanceof Error ? error.message : String(error);
+      this.pushLog(`Watcher error: ${message}`);
       this.emit();
     });
 
