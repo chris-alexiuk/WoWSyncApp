@@ -17,6 +17,7 @@ export interface AppConfig {
 
 export interface SyncState {
   running: boolean;
+  inFlight: boolean;
   lastRunAt: string | null;
   lastSuccessAt: string | null;
   lastError: string | null;

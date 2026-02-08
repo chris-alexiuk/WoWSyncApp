@@ -1,0 +1,270 @@
+import path from 'node:path';
+import fs from 'fs-extra';
+import { app } from 'electron';
+import simpleGit, { type SimpleGit } from 'simple-git';
+import type { AppConfig } from '../shared/types';
+
+const ADDONS_SUBDIR = 'addons';
+const META_FILE_NAME = '.wow-sync-meta.json';
+
+type LogFn = (line: string) => void;
+
+interface PreparedRepo {
+  git: SimpleGit;
+  repoPath: string;
+  remoteHasBranch: boolean;
+}
+
+interface LatestCommitInfo {
+  hash: string;
+  email: string;
+}
+
+export class GitSyncEngine {
+  async run(config: AppConfig, log: LogFn): Promise<string> {
+    this.validateConfig(config);
+
+    const prepared = await this.prepareRepo(config, log);
+
+    if (config.mode === 'source') {
+      return this.runSourceSync(prepared, config, log);
+    }
+
+    return this.runClientSync(prepared, config, log);
+  }
+
+  private validateConfig(config: AppConfig): void {
+    if (!config.repoUrl.trim()) {
+      throw new Error('Repository URL is required.');
+    }
+
+    if (!config.branch.trim()) {
+      throw new Error('Branch is required.');
+    }
+
+    if (config.mode === 'source' && !config.sourceAddonsPath.trim()) {
+      throw new Error('Source addons folder is required in source mode.');
+    }
+
+    if (config.mode === 'client' && !config.targetAddonsPath.trim()) {
+      throw new Error('Client addons folder is required in client mode.');
+    }
+
+    if (
+      config.mode === 'client' &&
+      !config.requireSignedCommits &&
+      config.trustedAuthorEmails.length === 0
+    ) {
+      throw new Error(
+        'Client trust check requires at least one trusted author email or signed commit enforcement.',
+      );
+    }
+  }
+
+  private getRepoCachePath(): string {
+    return path.join(app.getPath('userData'), 'sync-repo-cache');
+  }
+
+  private buildAuthRepoUrl(repoUrl: string, token: string): string {
+    const trimmed = repoUrl.trim();
+
+    if (!token.trim()) {
+      return trimmed;
+    }
+
+    try {
+      const parsed = new URL(trimmed);
+      if (parsed.protocol === 'https:') {
+        parsed.username = token.trim();
+        return parsed.toString();
+      }
+    } catch {
+      // Preserve original URL for non-HTTP remotes (SSH/local).
+    }
+
+    return trimmed;
+  }
+
+  private async prepareRepo(config: AppConfig, log: LogFn): Promise<PreparedRepo> {
+    const repoPath = this.getRepoCachePath();
+    const gitDir = path.join(repoPath, '.git');
+    const authRepoUrl = this.buildAuthRepoUrl(config.repoUrl, config.githubToken);
+
+    if (!(await fs.pathExists(gitDir))) {
+      log('Cloning sync repository into local cache...');
+      await fs.ensureDir(path.dirname(repoPath));
+      await fs.remove(repoPath);
+      await simpleGit().clone(authRepoUrl, repoPath);
+    }
+
+    const git = simpleGit(repoPath);
+
+    await git.remote(['set-url', 'origin', authRepoUrl]);
+    await git.fetch('origin');
+
+    await git.addConfig('user.name', config.authorName.trim() || 'WoW Sync Bot', false, 'local');
+    await git.addConfig(
+      'user.email',
+      config.authorEmail.trim() || 'wow-sync-bot@example.local',
+      false,
+      'local',
+    );
+
+    const localBranches = await git.branchLocal();
+    const remoteBranches = await git.branch(['-r']);
+
+    const branchName = config.branch.trim();
+    const remoteBranchName = `origin/${branchName}`;
+    const remoteHasBranch = remoteBranches.all.includes(remoteBranchName);
+
+    if (localBranches.all.includes(branchName)) {
+      await git.checkout(branchName);
+    } else if (remoteHasBranch) {
+      await git.checkout(['-b', branchName, remoteBranchName]);
+    } else {
+      await git.checkoutLocalBranch(branchName);
+    }
+
+    if (remoteHasBranch) {
+      await git.pull('origin', branchName, { '--ff-only': null });
+    }
+
+    return { git, repoPath, remoteHasBranch };
+  }
+
+  private async runSourceSync(
+    prepared: PreparedRepo,
+    config: AppConfig,
+    log: LogFn,
+  ): Promise<string> {
+    const sourcePath = config.sourceAddonsPath.trim();
+
+    if (!(await fs.pathExists(sourcePath))) {
+      throw new Error(`Source addons folder does not exist: ${sourcePath}`);
+    }
+
+    const repoAddonsPath = path.join(prepared.repoPath, ADDONS_SUBDIR);
+
+    log('Mirroring addon files into sync repository cache...');
+    await this.mirrorDirectory(sourcePath, repoAddonsPath);
+    await this.writeMetadata(prepared.repoPath, config);
+
+    await prepared.git.add(['-A']);
+    const status = await prepared.git.status();
+
+    if (status.files.length === 0) {
+      return 'No addon changes to push.';
+    }
+
+    const machineLabel = config.machineLabel.trim() || 'source';
+    const commitMessage = `sync(${machineLabel}) ${new Date().toISOString()}`;
+
+    await prepared.git.commit(commitMessage);
+
+    if (prepared.remoteHasBranch) {
+      await prepared.git.push('origin', config.branch);
+    } else {
+      await prepared.git.push(['-u', 'origin', config.branch]);
+    }
+
+    return `Pushed ${status.files.length} changed file(s) to ${config.branch}.`;
+  }
+
+  private async runClientSync(
+    prepared: PreparedRepo,
+    config: AppConfig,
+    log: LogFn,
+  ): Promise<string> {
+    const targetPath = config.targetAddonsPath.trim();
+
+    if (!prepared.remoteHasBranch) {
+      throw new Error(
+        `Remote branch ${config.branch} does not exist yet. Run source sync first to create it.`,
+      );
+    }
+
+    log('Fetching latest sync commits...');
+    await prepared.git.fetch('origin', config.branch);
+    await prepared.git.checkout(config.branch);
+    await prepared.git.pull('origin', config.branch, { '--ff-only': null });
+
+    const latestCommit = await this.verifyCommitTrust(prepared.git, config);
+
+    const repoAddonsPath = path.join(prepared.repoPath, ADDONS_SUBDIR);
+    if (!(await fs.pathExists(repoAddonsPath))) {
+      throw new Error('Sync repository has no addons payload yet.');
+    }
+
+    log('Applying synced addons to local client folder...');
+    await this.mirrorDirectory(repoAddonsPath, targetPath);
+
+    return `Updated addons from commit ${latestCommit.hash.slice(0, 8)} by ${latestCommit.email}.`;
+  }
+
+  private async mirrorDirectory(sourcePath: string, targetPath: string): Promise<void> {
+    await fs.ensureDir(sourcePath);
+    await fs.emptyDir(targetPath);
+
+    await fs.copy(sourcePath, targetPath, {
+      overwrite: true,
+      errorOnExist: false,
+      filter: (entryPath) => {
+        const fileName = path.basename(entryPath);
+        return fileName !== '.git' && fileName !== '.DS_Store' && fileName !== 'Thumbs.db';
+      },
+    });
+  }
+
+  private async writeMetadata(repoPath: string, config: AppConfig): Promise<void> {
+    const metadataPath = path.join(repoPath, META_FILE_NAME);
+
+    const metadata = {
+      machineLabel: config.machineLabel,
+      mode: config.mode,
+      updatedAt: new Date().toISOString(),
+      branch: config.branch,
+    };
+
+    await fs.writeJson(metadataPath, metadata, { spaces: 2 });
+  }
+
+  private async verifyCommitTrust(git: SimpleGit, config: AppConfig): Promise<LatestCommitInfo> {
+    const logOutput = await git.raw(['log', '--pretty=format:%H|%ae|%G?']);
+    const rows = logOutput
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter(Boolean);
+
+    if (rows.length === 0) {
+      throw new Error('No commits found in sync branch.');
+    }
+
+    const allowlist = config.trustedAuthorEmails
+      .map((email) => email.trim().toLowerCase())
+      .filter(Boolean);
+
+    for (const row of rows) {
+      const [hash, emailRaw, signatureStatusRaw] = row.split('|');
+      const email = (emailRaw ?? '').trim().toLowerCase();
+      const signatureStatus = (signatureStatusRaw ?? '').trim();
+
+      if (allowlist.length > 0 && !allowlist.includes(email)) {
+        throw new Error(
+          `Commit ${hash.slice(0, 8)} is authored by ${email}, which is not in trusted author list.`,
+        );
+      }
+
+      if (config.requireSignedCommits && !['G', 'U'].includes(signatureStatus)) {
+        throw new Error(
+          `Commit ${hash.slice(0, 8)} has signature state '${signatureStatus || '?'}'.`,
+        );
+      }
+    }
+
+    const [latestHash, latestEmailRaw] = rows[0].split('|');
+    return {
+      hash: latestHash,
+      email: (latestEmailRaw ?? '').trim(),
+    };
+  }
+}
