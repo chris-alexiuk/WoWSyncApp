@@ -142,6 +142,13 @@ export function App(): JSX.Element {
     }
   };
 
+  const pickGitBinary = async () => {
+    const selected = await window.wowSync.pickGitBinary(config.gitBinaryPath);
+    if (selected) {
+      patchConfig({ gitBinaryPath: selected });
+    }
+  };
+
   const formatDate = (iso: string | null) => {
     if (!iso) {
       return 'Never';
@@ -232,6 +239,20 @@ export function App(): JSX.Element {
             onChange={(event) => patchConfig({ githubToken: event.target.value })}
             placeholder="ghp_..."
           />
+        </label>
+
+        <label>
+          Git Binary Path (optional)
+          <div className="inline-field">
+            <input
+              value={config.gitBinaryPath}
+              onChange={(event) => patchConfig({ gitBinaryPath: event.target.value })}
+              placeholder="C:\\Program Files\\Git\\cmd\\git.exe or /usr/bin/git"
+            />
+            <button type="button" onClick={pickGitBinary}>
+              Browse
+            </button>
+          </div>
         </label>
 
         {mode === 'source' ? (

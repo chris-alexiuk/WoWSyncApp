@@ -8,5 +8,6 @@ export interface WoWSyncApi {
   stopSync: () => Promise<SyncState>;
   runSyncNow: (config: AppConfig) => Promise<SyncRunResult>;
   pickDirectory: (currentPath?: string) => Promise<string>;
+  pickGitBinary: (currentPath?: string) => Promise<string>;
   onState: (callback: (state: SyncState) => void) => () => void;
 }

@@ -1,4 +1,5 @@
 import path from 'node:path';
+import { spawnSync } from 'node:child_process';
 import fs from 'fs-extra';
 import { app } from 'electron';
 import simpleGit, { type SimpleGit } from 'simple-git';
@@ -6,6 +7,12 @@ import type { AppConfig } from '../shared/types';
 
 const ADDONS_SUBDIR = 'addons';
 const META_FILE_NAME = '.wow-sync-meta.json';
+const WINDOWS_GIT_CANDIDATES = [
+  'C:\\Program Files\\Git\\cmd\\git.exe',
+  'C:\\Program Files\\Git\\bin\\git.exe',
+  'C:\\Program Files (x86)\\Git\\cmd\\git.exe',
+  'C:\\Program Files (x86)\\Git\\bin\\git.exe',
+];
 
 type LogFn = (line: string) => void;
 
@@ -23,8 +30,9 @@ interface LatestCommitInfo {
 export class GitSyncEngine {
   async run(config: AppConfig, log: LogFn): Promise<string> {
     this.validateConfig(config);
+    const gitBinary = await this.resolveGitBinary(config, log);
 
-    const prepared = await this.prepareRepo(config, log);
+    const prepared = await this.prepareRepo(config, log, gitBinary);
 
     if (config.mode === 'source') {
       return this.runSourceSync(prepared, config, log);
@@ -85,7 +93,66 @@ export class GitSyncEngine {
     return trimmed;
   }
 
-  private async prepareRepo(config: AppConfig, log: LogFn): Promise<PreparedRepo> {
+  private normalizeConfiguredGitPath(inputPath: string): string {
+    const trimmed = inputPath.trim();
+    if (
+      (trimmed.startsWith('"') && trimmed.endsWith('"')) ||
+      (trimmed.startsWith("'") && trimmed.endsWith("'"))
+    ) {
+      return trimmed.slice(1, -1).trim();
+    }
+
+    return trimmed;
+  }
+
+  private isGitBinaryAvailable(binaryPath: string): boolean {
+    try {
+      const result = spawnSync(binaryPath, ['--version'], {
+        windowsHide: true,
+        timeout: 3000,
+      });
+
+      return result.status === 0;
+    } catch {
+      return false;
+    }
+  }
+
+  private async resolveGitBinary(config: AppConfig, log: LogFn): Promise<string> {
+    const configured = this.normalizeConfiguredGitPath(config.gitBinaryPath);
+    if (configured) {
+      if (await fs.pathExists(configured) && this.isGitBinaryAvailable(configured)) {
+        return configured;
+      }
+
+      throw new Error(
+        `Configured Git binary path is invalid: ${configured}. Set it to a valid git executable.`,
+      );
+    }
+
+    if (this.isGitBinaryAvailable('git')) {
+      return 'git';
+    }
+
+    if (process.platform === 'win32') {
+      for (const candidate of WINDOWS_GIT_CANDIDATES) {
+        if ((await fs.pathExists(candidate)) && this.isGitBinaryAvailable(candidate)) {
+          log(`Using Git binary at ${candidate}`);
+          return candidate;
+        }
+      }
+    }
+
+    throw new Error(
+      "Git executable was not found. Install Git and add it to PATH, or set 'Git Binary Path' (for example: C:\\Program Files\\Git\\cmd\\git.exe).",
+    );
+  }
+
+  private async prepareRepo(
+    config: AppConfig,
+    log: LogFn,
+    gitBinary: string,
+  ): Promise<PreparedRepo> {
     const repoPath = this.getRepoCachePath();
     const gitDir = path.join(repoPath, '.git');
     const authRepoUrl = this.buildAuthRepoUrl(config.repoUrl, config.githubToken);
@@ -94,10 +161,10 @@ export class GitSyncEngine {
       log('Cloning sync repository into local cache...');
       await fs.ensureDir(path.dirname(repoPath));
       await fs.remove(repoPath);
-      await simpleGit().clone(authRepoUrl, repoPath);
+      await simpleGit({ binary: gitBinary }).clone(authRepoUrl, repoPath);
     }
 
-    const git = simpleGit(repoPath);
+    const git = simpleGit({ baseDir: repoPath, binary: gitBinary });
 
     await git.remote(['set-url', 'origin', authRepoUrl]);
     await git.fetch('origin');

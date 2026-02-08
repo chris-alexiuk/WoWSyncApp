@@ -7,6 +7,7 @@ Electron desktop app for syncing World of Warcraft addon folders across multiple
 - `Source mode`: watches a local addons folder, mirrors it into a local repo cache, commits changes, and pushes to GitHub.
 - `Client mode`: pulls latest branch state from GitHub and applies synced addons to a local target folder.
 - Local config persistence through Electron `userData`.
+- Automatic Git detection (`PATH` plus common Windows Git locations) with optional explicit Git binary path in UI.
 - Commit trust checks for client ingest:
   - trusted author email allowlist
   - optional signed-commit enforcement

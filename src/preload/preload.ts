@@ -10,6 +10,7 @@ const api: WoWSyncApi = {
   stopSync: () => ipcRenderer.invoke('sync:stop'),
   runSyncNow: (config: AppConfig) => ipcRenderer.invoke('sync:runNow', config),
   pickDirectory: (currentPath?: string) => ipcRenderer.invoke('dialog:pickDirectory', currentPath),
+  pickGitBinary: (currentPath?: string) => ipcRenderer.invoke('dialog:pickGitBinary', currentPath),
   onState: (callback) => {
     const handler = (_event: Electron.IpcRendererEvent, state: SyncState) => callback(state);
     ipcRenderer.on('sync:state', handler);
