@@ -6,6 +6,7 @@ import simpleGit, { type SimpleGit } from 'simple-git';
 import type { AppConfig } from '../shared/types';
 
 const ADDONS_SUBDIR = 'addons';
+const PROFILES_SUBDIR = 'profiles';
 const META_FILE_NAME = '.wow-sync-meta.json';
 const WINDOWS_GIT_CANDIDATES = [
   'C:\\Program Files\\Git\\cmd\\git.exe',
@@ -54,8 +55,16 @@ export class GitSyncEngine {
       throw new Error('Source addons folder is required in source mode.');
     }
 
+    if (config.mode === 'source' && config.syncProfiles && !config.sourceProfilesPath.trim()) {
+      throw new Error('Source profiles folder is required when profile sync is enabled.');
+    }
+
     if (config.mode === 'client' && !config.targetAddonsPath.trim()) {
       throw new Error('Client addons folder is required in client mode.');
+    }
+
+    if (config.mode === 'client' && config.syncProfiles && !config.targetProfilesPath.trim()) {
+      throw new Error('Client profiles folder is required when profile sync is enabled.');
     }
 
     if (
@@ -204,16 +213,28 @@ export class GitSyncEngine {
     config: AppConfig,
     log: LogFn,
   ): Promise<string> {
-    const sourcePath = config.sourceAddonsPath.trim();
+    const sourceAddonsPath = config.sourceAddonsPath.trim();
 
-    if (!(await fs.pathExists(sourcePath))) {
-      throw new Error(`Source addons folder does not exist: ${sourcePath}`);
+    if (!(await fs.pathExists(sourceAddonsPath))) {
+      throw new Error(`Source addons folder does not exist: ${sourceAddonsPath}`);
     }
 
     const repoAddonsPath = path.join(prepared.repoPath, ADDONS_SUBDIR);
+    const sourceProfilesPath = config.sourceProfilesPath.trim();
+    const repoProfilesPath = path.join(prepared.repoPath, PROFILES_SUBDIR);
 
     log('Mirroring addon files into sync repository cache...');
-    await this.mirrorDirectory(sourcePath, repoAddonsPath);
+    await this.mirrorDirectory(sourceAddonsPath, repoAddonsPath);
+
+    if (config.syncProfiles) {
+      if (!(await fs.pathExists(sourceProfilesPath))) {
+        throw new Error(`Source profiles folder does not exist: ${sourceProfilesPath}`);
+      }
+
+      log('Mirroring profile files into sync repository cache...');
+      await this.mirrorDirectory(sourceProfilesPath, repoProfilesPath);
+    }
+
     await this.writeMetadata(prepared.repoPath, config);
 
     await prepared.git.add(['-A']);
@@ -242,7 +263,8 @@ export class GitSyncEngine {
     config: AppConfig,
     log: LogFn,
   ): Promise<string> {
-    const targetPath = config.targetAddonsPath.trim();
+    const targetAddonsPath = config.targetAddonsPath.trim();
+    const targetProfilesPath = config.targetProfilesPath.trim();
 
     if (!prepared.remoteHasBranch) {
       throw new Error(
@@ -263,9 +285,24 @@ export class GitSyncEngine {
     }
 
     log('Applying synced addons to local client folder...');
-    await this.mirrorDirectory(repoAddonsPath, targetPath);
+    await this.mirrorDirectory(repoAddonsPath, targetAddonsPath);
 
-    return `Updated addons from commit ${latestCommit.hash.slice(0, 8)} by ${latestCommit.email}.`;
+    if (config.syncProfiles) {
+      const repoProfilesPath = path.join(prepared.repoPath, PROFILES_SUBDIR);
+
+      if (!(await fs.pathExists(repoProfilesPath))) {
+        throw new Error(
+          'Sync repository has no profiles payload yet. Run source sync with profiles enabled first.',
+        );
+      }
+
+      log('Applying synced profile files to local client folder...');
+      await this.mirrorDirectory(repoProfilesPath, targetProfilesPath);
+    }
+
+    return config.syncProfiles
+      ? `Updated addons and profiles from commit ${latestCommit.hash.slice(0, 8)} by ${latestCommit.email}.`
+      : `Updated addons from commit ${latestCommit.hash.slice(0, 8)} by ${latestCommit.email}.`;
   }
 
   private async mirrorDirectory(sourcePath: string, targetPath: string): Promise<void> {
@@ -288,6 +325,7 @@ export class GitSyncEngine {
     const metadata = {
       machineLabel: config.machineLabel,
       mode: config.mode,
+      syncProfiles: config.syncProfiles,
       updatedAt: new Date().toISOString(),
       branch: config.branch,
     };

@@ -79,6 +79,14 @@ export function App(): JSX.Element {
       return false;
     }
 
+    if (mode === 'source' && config.syncProfiles && !config.sourceProfilesPath.trim()) {
+      return false;
+    }
+
+    if (mode === 'client' && config.syncProfiles && !config.targetProfilesPath.trim()) {
+      return false;
+    }
+
     if (!trustConfigured) {
       return false;
     }
@@ -135,7 +143,9 @@ export function App(): JSX.Element {
     setStatus('Auto-sync stopped');
   };
 
-  const pickDir = async (field: 'sourceAddonsPath' | 'targetAddonsPath') => {
+  const pickDir = async (
+    field: 'sourceAddonsPath' | 'targetAddonsPath' | 'sourceProfilesPath' | 'targetProfilesPath',
+  ) => {
     const selected = await window.wowSync.pickDirectory(config[field]);
     if (selected) {
       patchConfig({ [field]: selected } as Partial<AppConfig>);
@@ -255,34 +265,77 @@ export function App(): JSX.Element {
           </div>
         </label>
 
+        <label className="checkbox-line">
+          <input
+            type="checkbox"
+            checked={config.syncProfiles}
+            onChange={(event) => patchConfig({ syncProfiles: event.target.checked })}
+          />
+          Sync profile/config folder too (WTF / SavedVariables)
+        </label>
+
         {mode === 'source' ? (
-          <label>
-            Source Addons Folder
-            <div className="inline-field">
-              <input
-                value={config.sourceAddonsPath}
-                onChange={(event) => patchConfig({ sourceAddonsPath: event.target.value })}
-                placeholder="/path/to/Interface/AddOns"
-              />
-              <button type="button" onClick={() => pickDir('sourceAddonsPath')}>
-                Browse
-              </button>
-            </div>
-          </label>
+          <>
+            <label>
+              Source Addons Folder
+              <div className="inline-field">
+                <input
+                  value={config.sourceAddonsPath}
+                  onChange={(event) => patchConfig({ sourceAddonsPath: event.target.value })}
+                  placeholder="/path/to/Interface/AddOns"
+                />
+                <button type="button" onClick={() => pickDir('sourceAddonsPath')}>
+                  Browse
+                </button>
+              </div>
+            </label>
+            {config.syncProfiles ? (
+              <label>
+                Source Profiles Folder
+                <div className="inline-field">
+                  <input
+                    value={config.sourceProfilesPath}
+                    onChange={(event) => patchConfig({ sourceProfilesPath: event.target.value })}
+                    placeholder="/path/to/WTF or .../SavedVariables"
+                  />
+                  <button type="button" onClick={() => pickDir('sourceProfilesPath')}>
+                    Browse
+                  </button>
+                </div>
+              </label>
+            ) : null}
+          </>
         ) : (
-          <label>
-            Client Addons Folder
-            <div className="inline-field">
-              <input
-                value={config.targetAddonsPath}
-                onChange={(event) => patchConfig({ targetAddonsPath: event.target.value })}
-                placeholder="/path/to/Interface/AddOns"
-              />
-              <button type="button" onClick={() => pickDir('targetAddonsPath')}>
-                Browse
-              </button>
-            </div>
-          </label>
+          <>
+            <label>
+              Client Addons Folder
+              <div className="inline-field">
+                <input
+                  value={config.targetAddonsPath}
+                  onChange={(event) => patchConfig({ targetAddonsPath: event.target.value })}
+                  placeholder="/path/to/Interface/AddOns"
+                />
+                <button type="button" onClick={() => pickDir('targetAddonsPath')}>
+                  Browse
+                </button>
+              </div>
+            </label>
+            {config.syncProfiles ? (
+              <label>
+                Client Profiles Folder
+                <div className="inline-field">
+                  <input
+                    value={config.targetProfilesPath}
+                    onChange={(event) => patchConfig({ targetProfilesPath: event.target.value })}
+                    placeholder="/path/to/WTF or .../SavedVariables"
+                  />
+                  <button type="button" onClick={() => pickDir('targetProfilesPath')}>
+                    Browse
+                  </button>
+                </div>
+              </label>
+            ) : null}
+          </>
         )}
 
         <div className="grid two-up">

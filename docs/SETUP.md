@@ -19,6 +19,7 @@ This guide describes one source machine and one or more client machines.
    - GitHub Token
    - Optional Git Binary Path (set this if Git is not on PATH)
    - Source Addons Folder (`World of Warcraft/_retail_/Interface/AddOns`)
+   - Optional: enable profile sync and set Source Profiles Folder (`World of Warcraft/_retail_/WTF` or account `SavedVariables`)
    - Git author name/email
 4. Save config.
 5. Press `Sync Now` once to initialize branch and payload.
@@ -35,6 +36,7 @@ This guide describes one source machine and one or more client machines.
    - GitHub Token (read access is enough)
    - Optional Git Binary Path (example: `C:\Program Files\Git\cmd\git.exe`)
    - Client Addons Folder (`World of Warcraft/_retail_/Interface/AddOns`)
+   - Optional: enable profile sync and set Client Profiles Folder to matching destination path
 4. Configure trust guardrail:
    - add trusted author email(s), and/or
    - enable `Require signed commits on client ingest`
@@ -55,3 +57,4 @@ If validation fails, sync is aborted and the runtime panel shows the failure rea
 
 - Auto-sync in source mode also watches file changes and schedules a near-immediate push.
 - v0 mirrors addon folder content as-is (target folder is replaced with synced payload each run).
+- If profile sync is enabled, the profile target folder is also replaced with synced payload each run.

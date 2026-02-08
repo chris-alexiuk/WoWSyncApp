@@ -111,7 +111,12 @@ export class SyncService {
       return;
     }
 
-    this.watcher = chokidar.watch(config.sourceAddonsPath, {
+    const watchPaths = [config.sourceAddonsPath.trim()];
+    if (config.syncProfiles && config.sourceProfilesPath.trim()) {
+      watchPaths.push(config.sourceProfilesPath.trim());
+    }
+
+    this.watcher = chokidar.watch(watchPaths, {
       ignoreInitial: true,
       awaitWriteFinish: {
         stabilityThreshold: 900,
@@ -146,7 +151,9 @@ export class SyncService {
       this.emit();
     });
 
-    this.pushLog('Source folder watcher active.');
+    this.pushLog(
+      config.syncProfiles ? 'Source watcher active (addons + profiles).' : 'Source watcher active (addons).',
+    );
     this.emit();
   }
 

@@ -7,8 +7,11 @@ export interface AppConfig {
   branch: string;
   githubToken: string;
   gitBinaryPath: string;
+  syncProfiles: boolean;
   sourceAddonsPath: string;
+  sourceProfilesPath: string;
   targetAddonsPath: string;
+  targetProfilesPath: string;
   syncIntervalSeconds: number;
   trustedAuthorEmails: string[];
   requireSignedCommits: boolean;
