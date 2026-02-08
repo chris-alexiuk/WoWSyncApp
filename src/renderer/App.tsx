@@ -1,0 +1,354 @@
+import { useEffect, useMemo, useState } from 'react';
+import type { AppConfig, SyncMode, SyncState } from '../shared/types';
+
+const EMPTY_STATE: SyncState = {
+  running: false,
+  lastRunAt: null,
+  lastSuccessAt: null,
+  lastError: null,
+  logs: [],
+};
+
+function emailsToText(emails: string[]): string {
+  return emails.join(', ');
+}
+
+function textToEmails(text: string): string[] {
+  return text
+    .split(',')
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+}
+
+export function App(): JSX.Element {
+  const [config, setConfig] = useState<AppConfig | null>(null);
+  const [trustedEmailsText, setTrustedEmailsText] = useState('');
+  const [state, setState] = useState<SyncState>(EMPTY_STATE);
+  const [saving, setSaving] = useState(false);
+  const [status, setStatus] = useState('Loading config...');
+
+  useEffect(() => {
+    let unsubscribe = () => {};
+
+    void (async () => {
+      const initialConfig = await window.wowSync.loadConfig();
+      const initialState = await window.wowSync.getState();
+      setConfig(initialConfig);
+      setTrustedEmailsText(emailsToText(initialConfig.trustedAuthorEmails));
+      setState(initialState);
+      setStatus('Ready');
+      unsubscribe = window.wowSync.onState((next) => setState(next));
+    })();
+
+    return () => {
+      unsubscribe();
+    };
+  }, []);
+
+  const mode = config?.mode ?? 'source';
+
+  const canSave = useMemo(() => {
+    if (!config) {
+      return false;
+    }
+
+    if (!config.repoUrl.trim()) {
+      return false;
+    }
+
+    if (mode === 'source' && !config.sourceAddonsPath.trim()) {
+      return false;
+    }
+
+    if (mode === 'client' && !config.targetAddonsPath.trim()) {
+      return false;
+    }
+
+    return true;
+  }, [config, mode]);
+
+  if (!config) {
+    return (
+      <main className="app-shell">
+        <section className="panel hero">
+          <h1>WoW Sync App</h1>
+          <p>{status}</p>
+        </section>
+      </main>
+    );
+  }
+
+  const patchConfig = (patch: Partial<AppConfig>) => {
+    setConfig((prev) => (prev ? { ...prev, ...patch } : prev));
+  };
+
+  const saveConfig = async () => {
+    if (!config) {
+      return;
+    }
+
+    setSaving(true);
+    const nextConfig: AppConfig = {
+      ...config,
+      trustedAuthorEmails: textToEmails(trustedEmailsText),
+    };
+
+    await window.wowSync.saveConfig(nextConfig);
+    setConfig(nextConfig);
+    setSaving(false);
+    setStatus('Config saved');
+  };
+
+  const runNow = async () => {
+    if (!config) {
+      return;
+    }
+
+    setStatus('Running sync...');
+    const result = await window.wowSync.runSyncNow({
+      ...config,
+      trustedAuthorEmails: textToEmails(trustedEmailsText),
+    });
+    setStatus(result.message);
+  };
+
+  const startAutoSync = async () => {
+    if (!config) {
+      return;
+    }
+
+    const nextConfig = {
+      ...config,
+      trustedAuthorEmails: textToEmails(trustedEmailsText),
+    };
+
+    await window.wowSync.saveConfig(nextConfig);
+    setConfig(nextConfig);
+    await window.wowSync.startSync(nextConfig);
+    setStatus('Auto-sync running');
+  };
+
+  const stopAutoSync = async () => {
+    await window.wowSync.stopSync();
+    setStatus('Auto-sync stopped');
+  };
+
+  const pickDir = async (field: 'sourceAddonsPath' | 'targetAddonsPath') => {
+    const selected = await window.wowSync.pickDirectory(config[field]);
+    if (selected) {
+      patchConfig({ [field]: selected });
+    }
+  };
+
+  const formatDate = (iso: string | null) => {
+    if (!iso) {
+      return 'Never';
+    }
+
+    return new Date(iso).toLocaleString();
+  };
+
+  const modeLabel = (modeValue: SyncMode) =>
+    modeValue === 'source' ? 'Source Machine (Push)' : 'Client Machine (Pull)';
+
+  return (
+    <main className="app-shell">
+      <section className="panel hero">
+        <div className="hero-brand">
+          <span className="badge">v0 prototype</span>
+          <h1>WoW Sync App</h1>
+          <p>Keep addon folders aligned across machines through one shared GitHub flow.</p>
+        </div>
+        <div className="hero-metrics">
+          <article>
+            <h3>Status</h3>
+            <p>{state.running ? 'Auto-sync ON' : 'Idle'}</p>
+          </article>
+          <article>
+            <h3>Last Success</h3>
+            <p>{formatDate(state.lastSuccessAt)}</p>
+          </article>
+          <article>
+            <h3>Mode</h3>
+            <p>{modeLabel(mode)}</p>
+          </article>
+        </div>
+      </section>
+
+      <section className="panel controls">
+        <header>
+          <h2>Configuration</h2>
+          <p>{status}</p>
+        </header>
+
+        <div className="mode-toggle" role="radiogroup" aria-label="Sync mode">
+          {(['source', 'client'] as SyncMode[]).map((option) => (
+            <button
+              key={option}
+              className={option === mode ? 'active' : ''}
+              onClick={() => patchConfig({ mode: option })}
+              type="button"
+            >
+              {modeLabel(option)}
+            </button>
+          ))}
+        </div>
+
+        <div className="grid two-up">
+          <label>
+            Machine Label
+            <input
+              value={config.machineLabel}
+              onChange={(event) => patchConfig({ machineLabel: event.target.value })}
+              placeholder="Raid-PC-Source"
+            />
+          </label>
+          <label>
+            Branch
+            <input
+              value={config.branch}
+              onChange={(event) => patchConfig({ branch: event.target.value })}
+              placeholder="development"
+            />
+          </label>
+        </div>
+
+        <label>
+          GitHub Repository URL
+          <input
+            value={config.repoUrl}
+            onChange={(event) => patchConfig({ repoUrl: event.target.value })}
+            placeholder="https://github.com/your-org/wow-sync-data.git"
+          />
+        </label>
+
+        <label>
+          GitHub Token (PAT)
+          <input
+            type="password"
+            value={config.githubToken}
+            onChange={(event) => patchConfig({ githubToken: event.target.value })}
+            placeholder="ghp_..."
+          />
+        </label>
+
+        {mode === 'source' ? (
+          <label>
+            Source Addons Folder
+            <div className="inline-field">
+              <input
+                value={config.sourceAddonsPath}
+                onChange={(event) => patchConfig({ sourceAddonsPath: event.target.value })}
+                placeholder="/path/to/Interface/AddOns"
+              />
+              <button type="button" onClick={() => pickDir('sourceAddonsPath')}>
+                Browse
+              </button>
+            </div>
+          </label>
+        ) : (
+          <label>
+            Client Addons Folder
+            <div className="inline-field">
+              <input
+                value={config.targetAddonsPath}
+                onChange={(event) => patchConfig({ targetAddonsPath: event.target.value })}
+                placeholder="/path/to/Interface/AddOns"
+              />
+              <button type="button" onClick={() => pickDir('targetAddonsPath')}>
+                Browse
+              </button>
+            </div>
+          </label>
+        )}
+
+        <div className="grid two-up">
+          <label>
+            Git Author Name
+            <input
+              value={config.authorName}
+              onChange={(event) => patchConfig({ authorName: event.target.value })}
+              placeholder="WoW Sync Bot"
+            />
+          </label>
+          <label>
+            Git Author Email
+            <input
+              value={config.authorEmail}
+              onChange={(event) => patchConfig({ authorEmail: event.target.value })}
+              placeholder="wow-sync-bot@example.local"
+            />
+          </label>
+        </div>
+
+        <div className="grid two-up">
+          <label>
+            Sync Interval (seconds)
+            <input
+              type="number"
+              min={10}
+              value={config.syncIntervalSeconds}
+              onChange={(event) =>
+                patchConfig({ syncIntervalSeconds: Math.max(10, Number(event.target.value) || 10) })
+              }
+            />
+          </label>
+          <label className="checkbox-line">
+            <input
+              type="checkbox"
+              checked={config.requireSignedCommits}
+              onChange={(event) => patchConfig({ requireSignedCommits: event.target.checked })}
+            />
+            Require signed commits on client ingest
+          </label>
+        </div>
+
+        <label>
+          Trusted Author Emails (comma separated)
+          <textarea
+            value={trustedEmailsText}
+            onChange={(event) => setTrustedEmailsText(event.target.value)}
+            placeholder="you@example.com, alt@example.com"
+          />
+        </label>
+
+        <div className="actions">
+          <button type="button" className="primary" disabled={!canSave || saving} onClick={saveConfig}>
+            {saving ? 'Saving...' : 'Save Config'}
+          </button>
+          <button type="button" onClick={startAutoSync} disabled={!canSave}>
+            Start Auto Sync
+          </button>
+          <button type="button" onClick={runNow} disabled={!canSave}>
+            Sync Now
+          </button>
+          <button type="button" className="ghost" onClick={stopAutoSync}>
+            Stop
+          </button>
+        </div>
+      </section>
+
+      <section className="panel logs">
+        <header>
+          <h2>Runtime</h2>
+          <p>{state.lastError ? `Error: ${state.lastError}` : 'No active errors'}</p>
+        </header>
+        <div className="runtime-grid">
+          <article>
+            <h3>Last Run</h3>
+            <p>{formatDate(state.lastRunAt)}</p>
+          </article>
+          <article>
+            <h3>Last Success</h3>
+            <p>{formatDate(state.lastSuccessAt)}</p>
+          </article>
+          <article>
+            <h3>Process</h3>
+            <p>{state.running ? 'Auto mode active' : 'Manual mode'}</p>
+          </article>
+        </div>
+        <pre className="log-view">{state.logs.join('\n') || 'No logs yet'}</pre>
+      </section>
+    </main>
+  );
+}
