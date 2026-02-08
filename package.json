@@ -1,6 +1,6 @@
 {
   "name": "wow-sync-app",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "private": true,
   "description": "Desktop sync app for WoW addons across machines",
   "author": {
