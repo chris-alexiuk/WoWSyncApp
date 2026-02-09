@@ -24,6 +24,7 @@ body {
     radial-gradient(1200px 500px at 14% -12%, rgba(115, 213, 255, 0.36), transparent 62%),
     radial-gradient(1000px 420px at 95% 12%, rgba(124, 147, 255, 0.3), transparent 64%),
     linear-gradient(160deg, var(--bg) 0%, var(--bg-alt) 46%, #050a13 100%);
+  overflow: hidden;
 }
 
 #root {
@@ -31,11 +32,80 @@ body {
 }
 
 .app-shell {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.app-content {
+  flex: 1;
+  overflow: auto;
   max-width: 1240px;
+  width: 100%;
   margin: 0 auto;
-  padding: 28px 24px 38px;
+  padding: 18px 24px 38px;
   display: grid;
   gap: 18px;
+}
+
+.window-chrome {
+  height: 42px;
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0 8px 0 14px;
+  border-bottom: 1px solid rgba(122, 167, 255, 0.25);
+  background: rgba(6, 11, 20, 0.82);
+  backdrop-filter: blur(8px);
+  -webkit-app-region: drag;
+}
+
+.window-chrome__title {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: #d9e7ff;
+  letter-spacing: 0.03em;
+  font-size: 0.9rem;
+  user-select: none;
+}
+
+.window-chrome__dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 999px;
+  background: linear-gradient(160deg, #78c7ff, #5ea9ff);
+  box-shadow: 0 0 12px rgba(120, 199, 255, 0.65);
+}
+
+.window-chrome__controls {
+  display: flex;
+  align-items: stretch;
+  gap: 6px;
+  -webkit-app-region: no-drag;
+}
+
+.window-btn {
+  min-width: 44px;
+  height: 30px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: rgba(255, 255, 255, 0.08);
+  color: #eaf2ff;
+  font-size: 0.9rem;
+  line-height: 1;
+  padding: 0;
+}
+
+.window-btn:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.window-btn--close:hover {
+  background: #ff5f67;
+  border-color: rgba(255, 255, 255, 0.18);
+  color: #1b0002;
 }
 
 .panel {
