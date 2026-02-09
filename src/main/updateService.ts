@@ -1,119 +1,267 @@
 import { app } from 'electron';
-import type { UpdateCheckResult } from '../shared/types';
+import { autoUpdater, type ProgressInfo, type UpdateInfo } from 'electron-updater';
+import type { AppUpdateState } from '../shared/types';
 
-const LATEST_RELEASE_API = 'https://api.github.com/repos/chris-alexiuk/WoWSyncApp/releases/latest';
-
-interface LatestReleaseResponse {
-  tag_name?: string;
-  html_url?: string;
-  published_at?: string;
-  body?: string;
-}
+const LATEST_RELEASE_URL = 'https://github.com/chris-alexiuk/WoWSyncApp/releases/latest';
 
 function normalizeVersion(version: string): string {
   return version.trim().replace(/^v/i, '');
 }
 
-function compareVersions(a: string, b: string): number {
-  const aParts = normalizeVersion(a)
-    .split('.')
-    .map((part) => Number.parseInt(part, 10) || 0);
-  const bParts = normalizeVersion(b)
-    .split('.')
-    .map((part) => Number.parseInt(part, 10) || 0);
-
-  const len = Math.max(aParts.length, bParts.length);
-  for (let i = 0; i < len; i += 1) {
-    const av = aParts[i] ?? 0;
-    const bv = bParts[i] ?? 0;
-
-    if (av > bv) {
-      return 1;
-    }
-
-    if (av < bv) {
-      return -1;
-    }
-  }
-
-  return 0;
-}
-
-function summarizeNotes(body?: string): string | null {
-  if (!body) {
+function summarizeNotes(notes?: string): string | null {
+  if (!notes) {
     return null;
   }
 
-  const trimmed = body.trim();
+  const trimmed = notes.trim();
   if (!trimmed) {
     return null;
   }
 
-  return trimmed.length > 700 ? `${trimmed.slice(0, 700)}...` : trimmed;
+  return trimmed.length > 1000 ? `${trimmed.slice(0, 1000)}...` : trimmed;
 }
 
-export async function checkForAppUpdate(): Promise<UpdateCheckResult> {
+function normalizeReleaseNotes(releaseNotes: UpdateInfo['releaseNotes']): string | null {
+  if (!releaseNotes) {
+    return null;
+  }
+
+  if (typeof releaseNotes === 'string') {
+    return summarizeNotes(releaseNotes);
+  }
+
+  const merged = releaseNotes
+    .map((entry) => entry.note?.trim() ?? '')
+    .filter(Boolean)
+    .join('\n\n');
+
+  return summarizeNotes(merged);
+}
+
+function toErrorMessage(error: unknown): string {
+  if (error instanceof Error) {
+    return error.message;
+  }
+
+  return String(error);
+}
+
+function createInitialState(message: string): AppUpdateState {
   const currentVersion = normalizeVersion(app.getVersion());
 
-  try {
-    const response = await fetch(LATEST_RELEASE_API, {
-      headers: {
-        Accept: 'application/vnd.github+json',
-        'User-Agent': 'wow-sync-app',
-      },
+  return {
+    phase: 'idle',
+    currentVersion,
+    latestVersion: null,
+    hasUpdate: false,
+    releaseUrl: LATEST_RELEASE_URL,
+    publishedAt: null,
+    notes: null,
+    message,
+    checkedAt: null,
+    downloadPercent: null,
+    bytesPerSecond: null,
+    transferredBytes: null,
+    totalBytes: null,
+    canCheck: true,
+    canDownload: false,
+    canInstall: false,
+  };
+}
+
+export class UpdateService {
+  private state: AppUpdateState;
+
+  constructor(private readonly onStateChange: (state: AppUpdateState) => void) {
+    this.state = this.createSupportedState();
+
+    autoUpdater.autoDownload = false;
+    autoUpdater.autoInstallOnAppQuit = true;
+
+    autoUpdater.on('checking-for-update', () => {
+      this.setState({
+        phase: 'checking',
+        message: `Checking for updates (v${this.state.currentVersion})...`,
+        checkedAt: null,
+        canCheck: false,
+      });
     });
 
-    if (!response.ok) {
-      return {
-        currentVersion,
-        latestVersion: null,
+    autoUpdater.on('update-available', (info) => {
+      this.applyUpdateInfo(info);
+      this.setState({
+        phase: 'available',
+        hasUpdate: true,
+        message: `Update available: v${this.state.latestVersion ?? 'unknown'}.`,
+        canCheck: true,
+        canDownload: true,
+        canInstall: false,
+      });
+    });
+
+    autoUpdater.on('update-not-available', (info) => {
+      this.applyUpdateInfo(info);
+      this.setState({
+        phase: 'not-available',
         hasUpdate: false,
-        releaseUrl: null,
-        publishedAt: null,
-        notes: null,
-        message: `Update check failed (HTTP ${response.status}).`,
+        message: `You are up to date (v${this.state.currentVersion}).`,
+        checkedAt: new Date().toISOString(),
+        downloadPercent: null,
+        bytesPerSecond: null,
+        transferredBytes: null,
+        totalBytes: null,
+        canCheck: true,
+        canDownload: false,
+        canInstall: false,
+      });
+    });
+
+    autoUpdater.on('download-progress', (progress: ProgressInfo) => {
+      this.setState({
+        phase: 'downloading',
+        message: `Downloading update: ${progress.percent.toFixed(1)}%`,
+        downloadPercent: progress.percent,
+        bytesPerSecond: progress.bytesPerSecond,
+        transferredBytes: progress.transferred,
+        totalBytes: progress.total,
+        canCheck: false,
+        canDownload: false,
+        canInstall: false,
+      });
+    });
+
+    autoUpdater.on('update-downloaded', (info) => {
+      this.applyUpdateInfo(info);
+      this.setState({
+        phase: 'downloaded',
+        hasUpdate: true,
+        checkedAt: new Date().toISOString(),
+        downloadPercent: 100,
+        message: `Update ready: v${this.state.latestVersion ?? 'unknown'}. Install and restart when ready.`,
+        canCheck: true,
+        canDownload: false,
+        canInstall: true,
+      });
+    });
+
+    autoUpdater.on('error', (error: Error) => {
+      this.setState({
+        phase: 'error',
+        message: `Update error: ${error.message}`,
+        checkedAt: new Date().toISOString(),
+        canCheck: true,
+        canDownload: this.state.hasUpdate && !this.state.canInstall,
+        canInstall: this.state.canInstall,
+      });
+    });
+  }
+
+  getState(): AppUpdateState {
+    return this.state;
+  }
+
+  async checkForUpdates(): Promise<AppUpdateState> {
+    if (this.state.phase === 'unsupported') {
+      return this.state;
+    }
+
+    try {
+      await autoUpdater.checkForUpdates();
+      return this.state;
+    } catch (error) {
+      this.setState({
+        phase: 'error',
+        message: `Update check failed: ${toErrorMessage(error)}`,
+        checkedAt: new Date().toISOString(),
+        canCheck: true,
+      });
+      return this.state;
+    }
+  }
+
+  async downloadUpdate(): Promise<AppUpdateState> {
+    if (this.state.phase === 'unsupported') {
+      return this.state;
+    }
+
+    if (!this.state.hasUpdate) {
+      this.setState({
+        message: 'No update is available to download.',
+      });
+      return this.state;
+    }
+
+    if (this.state.canInstall) {
+      return this.state;
+    }
+
+    try {
+      await autoUpdater.downloadUpdate();
+      return this.state;
+    } catch (error) {
+      this.setState({
+        phase: 'error',
+        message: `Download failed: ${toErrorMessage(error)}`,
+        checkedAt: new Date().toISOString(),
+        canCheck: true,
+        canDownload: true,
+      });
+      return this.state;
+    }
+  }
+
+  installUpdateAndRestart(): { ok: boolean; message: string } {
+    if (this.state.phase === 'unsupported') {
+      return { ok: false, message: this.state.message };
+    }
+
+    if (!this.state.canInstall) {
+      return { ok: false, message: 'No downloaded update is ready to install.' };
+    }
+
+    setImmediate(() => {
+      autoUpdater.quitAndInstall();
+    });
+
+    return { ok: true, message: 'Installing update and restarting app...' };
+  }
+
+  private createSupportedState(): AppUpdateState {
+    if (!app.isPackaged) {
+      return {
+        ...createInitialState('Auto-update works in packaged builds. Development mode is unsupported.'),
+        phase: 'unsupported',
+        canCheck: false,
       };
     }
 
-    const release = (await response.json()) as LatestReleaseResponse;
-    const latestVersion = normalizeVersion(release.tag_name ?? '');
-
-    if (!latestVersion) {
+    if (process.platform === 'win32' && process.env.PORTABLE_EXECUTABLE_FILE) {
       return {
-        currentVersion,
-        latestVersion: null,
-        hasUpdate: false,
-        releaseUrl: release.html_url ?? null,
-        publishedAt: release.published_at ?? null,
-        notes: summarizeNotes(release.body),
-        message: 'No valid release version found from GitHub.',
+        ...createInitialState(
+          'Portable build detected. Install the NSIS installer build once to enable in-place auto-updates.',
+        ),
+        phase: 'unsupported',
+        canCheck: false,
       };
     }
 
-    const hasUpdate = compareVersions(latestVersion, currentVersion) > 0;
+    return createInitialState('Ready to check for updates.');
+  }
 
-    return {
-      currentVersion,
-      latestVersion,
-      hasUpdate,
-      releaseUrl: release.html_url ?? null,
-      publishedAt: release.published_at ?? null,
-      notes: summarizeNotes(release.body),
-      message: hasUpdate
-        ? `Update available: v${latestVersion}`
-        : `You are up to date (v${currentVersion}).`,
-    };
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
+  private applyUpdateInfo(info: UpdateInfo): void {
+    this.setState({
+      latestVersion: normalizeVersion(info.version),
+      publishedAt: info.releaseDate ?? null,
+      notes: normalizeReleaseNotes(info.releaseNotes),
+      releaseUrl: LATEST_RELEASE_URL,
+    });
+  }
 
-    return {
-      currentVersion,
-      latestVersion: null,
-      hasUpdate: false,
-      releaseUrl: null,
-      publishedAt: null,
-      notes: null,
-      message: `Update check failed: ${message}`,
+  private setState(patch: Partial<AppUpdateState>): void {
+    this.state = {
+      ...this.state,
+      ...patch,
     };
+    this.onStateChange(this.state);
   }
 }

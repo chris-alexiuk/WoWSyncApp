@@ -9,7 +9,7 @@ Electron desktop app for syncing World of Warcraft addon folders across multiple
 - Optional profile sync: sync an additional WoW profile/config path (for example `WTF` or `SavedVariables`).
 - Local config persistence through Electron `userData`.
 - Automatic Git detection (`PATH` plus common Windows Git locations) with optional explicit Git binary path in UI.
-- Built-in app update checker that reads latest GitHub release and opens download page from the UI.
+- Built-in in-place app updater (check, download, install-and-restart) powered by GitHub Releases.
 - Commit trust checks for client ingest:
   - trusted author email allowlist
   - optional signed-commit enforcement
@@ -52,7 +52,11 @@ bun run dist:win
 
 Artifacts are written to `release/`.
 
-`bun run dist:win:installer` builds an NSIS installer, but on Linux it typically requires `wine`.
+`bun run dist:win` now includes `nsis` installer artifacts required for in-place Windows updates.
+
+`bun run dist:win:installer` builds only the NSIS installer target, but on Linux it typically requires `wine`.
+
+For in-place update delivery, each GitHub release must include the Windows updater metadata files (for example `latest.yml` plus the NSIS `.exe` package).
 
 ## Security model (v0)
 
@@ -60,5 +64,6 @@ Artifacts are written to `release/`.
 - Client ingest blocks untrusted commits when trusted emails are configured.
 - Signed commits can be enforced for stricter validation.
 - GitHub token is currently stored in local app config for automation.
+- In-place auto-update requires installer-based Windows builds (portable EXE builds are read-only for updates).
 
 Read `docs/SETUP.md` for source/client setup steps.

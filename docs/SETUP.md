@@ -43,6 +43,10 @@ This guide describes one source machine and one or more client machines.
 5. Save config.
 6. Press `Sync Now` to ingest latest addons.
 7. Optional: `Start Auto Sync` for periodic pulls.
+8. Use `App Updates`:
+   - `Check for Updates`
+   - `Download` when a release is available
+   - `Install and Restart` to apply in place
 
 ## 4. Trust validation behavior
 
@@ -58,4 +62,4 @@ If validation fails, sync is aborted and the runtime panel shows the failure rea
 - Auto-sync in source mode also watches file changes and schedules a near-immediate push.
 - v0 mirrors addon folder content as-is (target folder is replaced with synced payload each run).
 - If profile sync is enabled, the profile target folder is also replaced with synced payload each run.
-- The `App Updates` panel can check GitHub for the latest release and open the download page for testers.
+- Windows in-place updates require the NSIS installer build (portable builds show an unsupported message).

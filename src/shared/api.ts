@@ -1,8 +1,8 @@
 import type {
+  AppUpdateState,
   AppConfig,
   SyncRunResult,
   SyncState,
-  UpdateCheckResult,
   WindowState,
 } from './types';
 
@@ -15,8 +15,12 @@ export interface WoWSyncApi {
   runSyncNow: (config: AppConfig) => Promise<SyncRunResult>;
   pickDirectory: (currentPath?: string) => Promise<string>;
   pickGitBinary: (currentPath?: string) => Promise<string>;
-  checkForAppUpdate: () => Promise<UpdateCheckResult>;
+  getAppUpdateState: () => Promise<AppUpdateState>;
+  checkForAppUpdate: () => Promise<AppUpdateState>;
+  downloadAppUpdate: () => Promise<AppUpdateState>;
+  installAppUpdate: () => Promise<{ ok: boolean; message: string }>;
   openExternalUrl: (url: string) => Promise<{ ok: boolean }>;
+  onAppUpdateState: (callback: (state: AppUpdateState) => void) => () => void;
   getWindowState: () => Promise<WindowState>;
   usesCustomWindowChrome: () => Promise<boolean>;
   minimizeWindow: () => Promise<{ ok: boolean }>;

@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
 import type {
+  AppUpdateState,
   AppConfig,
   SyncMode,
   SyncState,
-  UpdateCheckResult,
   WindowState,
 } from '../shared/types';
 
@@ -18,6 +18,25 @@ const EMPTY_STATE: SyncState = {
 
 const EMPTY_WINDOW_STATE: WindowState = {
   isMaximized: false,
+};
+
+const EMPTY_UPDATE_STATE: AppUpdateState = {
+  phase: 'idle',
+  currentVersion: 'unknown',
+  latestVersion: null,
+  hasUpdate: false,
+  releaseUrl: null,
+  publishedAt: null,
+  notes: null,
+  message: 'Update state unavailable.',
+  checkedAt: null,
+  downloadPercent: null,
+  bytesPerSecond: null,
+  transferredBytes: null,
+  totalBytes: null,
+  canCheck: true,
+  canDownload: false,
+  canInstall: false,
 };
 
 function emailsToText(emails: string[]): string {
@@ -37,45 +56,30 @@ export function App(): JSX.Element {
   const [state, setState] = useState<SyncState>(EMPTY_STATE);
   const [saving, setSaving] = useState(false);
   const [status, setStatus] = useState('Loading config...');
-  const [updateState, setUpdateState] = useState<UpdateCheckResult | null>(null);
-  const [checkingUpdates, setCheckingUpdates] = useState(false);
+  const [updateState, setUpdateState] = useState<AppUpdateState>(EMPTY_UPDATE_STATE);
   const [windowState, setWindowState] = useState<WindowState>(EMPTY_WINDOW_STATE);
   const [useCustomWindowChrome, setUseCustomWindowChrome] = useState(true);
 
   useEffect(() => {
     let unsubscribeSyncState = () => {};
+    let unsubscribeUpdateState = () => {};
 
     void (async () => {
       try {
         const initialConfig = await window.wowSync.loadConfig();
         const initialState = await window.wowSync.getState();
+        const initialUpdateState = await window.wowSync.getAppUpdateState();
         setConfig(initialConfig);
         setTrustedEmailsText(emailsToText(initialConfig.trustedAuthorEmails));
         setState(initialState);
+        setUpdateState(initialUpdateState);
         setStatus('Ready');
         unsubscribeSyncState = window.wowSync.onState((next) => setState(next));
+        unsubscribeUpdateState = window.wowSync.onAppUpdateState((next) => setUpdateState(next));
 
-        void (async () => {
-          setCheckingUpdates(true);
-
-          try {
-            const updateResult = await window.wowSync.checkForAppUpdate();
-            setUpdateState(updateResult);
-          } catch (error) {
-            const message = error instanceof Error ? error.message : String(error);
-            setUpdateState({
-              currentVersion: 'unknown',
-              latestVersion: null,
-              hasUpdate: false,
-              releaseUrl: null,
-              publishedAt: null,
-              notes: null,
-              message: `Update check failed: ${message}`,
-            });
-          } finally {
-            setCheckingUpdates(false);
-          }
-        })();
+        if (initialUpdateState.canCheck) {
+          await window.wowSync.checkForAppUpdate();
+        }
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         setStatus(`Failed to load config: ${message}`);
@@ -84,6 +88,7 @@ export function App(): JSX.Element {
 
     return () => {
       unsubscribeSyncState();
+      unsubscribeUpdateState();
     };
   }, []);
 
@@ -224,29 +229,22 @@ export function App(): JSX.Element {
   };
 
   const checkForUpdates = async () => {
-    setCheckingUpdates(true);
+    const result = await window.wowSync.checkForAppUpdate();
+    setUpdateState(result);
+  };
 
-    try {
-      const result = await window.wowSync.checkForAppUpdate();
-      setUpdateState(result);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      setUpdateState({
-        currentVersion: 'unknown',
-        latestVersion: null,
-        hasUpdate: false,
-        releaseUrl: null,
-        publishedAt: null,
-        notes: null,
-        message: `Update check failed: ${message}`,
-      });
-    } finally {
-      setCheckingUpdates(false);
-    }
+  const downloadUpdate = async () => {
+    const result = await window.wowSync.downloadAppUpdate();
+    setUpdateState(result);
+  };
+
+  const installUpdate = async () => {
+    const result = await window.wowSync.installAppUpdate();
+    setStatus(result.message);
   };
 
   const openLatestRelease = async () => {
-    if (!updateState?.releaseUrl) {
+    if (!updateState.releaseUrl) {
       return;
     }
 
@@ -345,36 +343,60 @@ export function App(): JSX.Element {
         <section className="panel updates">
           <header>
             <h2>App Updates</h2>
-            <p>{updateState?.message ?? 'No update check yet'}</p>
+            <p>{updateState.message}</p>
           </header>
           <div className="update-grid">
             <article>
               <h3>Current Version</h3>
-              <p>{updateState?.currentVersion ? `v${updateState.currentVersion}` : 'Unknown'}</p>
+              <p>{updateState.currentVersion ? `v${updateState.currentVersion}` : 'Unknown'}</p>
             </article>
             <article>
               <h3>Latest Release</h3>
-              <p>{updateState?.latestVersion ? `v${updateState.latestVersion}` : 'Unknown'}</p>
+              <p>{updateState.latestVersion ? `v${updateState.latestVersion}` : 'Unknown'}</p>
             </article>
             <article>
               <h3>Published</h3>
-              <p>{formatDate(updateState?.publishedAt ?? null)}</p>
+              <p>{formatDate(updateState.publishedAt)}</p>
+            </article>
+            <article>
+              <h3>Last Check</h3>
+              <p>{formatDate(updateState.checkedAt)}</p>
             </article>
           </div>
-          {updateState?.notes ? <pre className="update-notes">{updateState.notes}</pre> : null}
+          {updateState.downloadPercent !== null ? (
+            <p>
+              Download: {updateState.downloadPercent.toFixed(1)}%{' '}
+              {updateState.totalBytes
+                ? `(${Math.round((updateState.transferredBytes ?? 0) / 1024 / 1024)}MB / ${Math.round(updateState.totalBytes / 1024 / 1024)}MB)`
+                : ''}
+            </p>
+          ) : null}
+          {updateState.notes ? <pre className="update-notes">{updateState.notes}</pre> : null}
           <div className="actions">
-            <button type="button" onClick={checkForUpdates} disabled={checkingUpdates}>
-              {checkingUpdates ? 'Checking...' : 'Check for Updates'}
+            <button type="button" onClick={checkForUpdates} disabled={!updateState.canCheck}>
+              {updateState.phase === 'checking' ? 'Checking...' : 'Check for Updates'}
             </button>
             <button
               type="button"
               className="primary"
-              onClick={openLatestRelease}
-              disabled={!updateState?.releaseUrl}
+              onClick={downloadUpdate}
+              disabled={!updateState.canDownload}
             >
-              {updateState?.hasUpdate && updateState.latestVersion
-                ? `Download v${updateState.latestVersion}`
-                : 'Open Release Page'}
+              {updateState.phase === 'downloading'
+                ? 'Downloading...'
+                : updateState.latestVersion
+                  ? `Download v${updateState.latestVersion}`
+                  : 'Download Update'}
+            </button>
+            <button type="button" className="primary" onClick={installUpdate} disabled={!updateState.canInstall}>
+              Install and Restart
+            </button>
+            <button
+              type="button"
+              onClick={openLatestRelease}
+              disabled={!updateState.releaseUrl}
+            >
+              Open Release Page
             </button>
           </div>
         </section>

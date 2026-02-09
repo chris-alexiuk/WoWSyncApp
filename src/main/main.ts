@@ -9,13 +9,16 @@ import {
 } from 'electron';
 import { loadConfig, saveConfig } from './configStore';
 import { SyncService } from './syncService';
-import { checkForAppUpdate } from './updateService';
+import { UpdateService } from './updateService';
 import type { AppConfig, SyncState, WindowState } from '../shared/types';
 
 let mainWindow: BrowserWindow | null = null;
 const useCustomWindowChrome = process.platform !== 'darwin';
 const syncService = new SyncService((state: SyncState) => {
   mainWindow?.webContents.send('sync:state', state);
+});
+const updateService = new UpdateService((state) => {
+  mainWindow?.webContents.send('update:state', state);
 });
 
 function currentWindowState(): WindowState {
@@ -88,7 +91,10 @@ function registerIpc(): void {
 
   ipcMain.handle('sync:runNow', async (_event, config: AppConfig) => syncService.runNow(config));
 
-  ipcMain.handle('update:check', async () => checkForAppUpdate());
+  ipcMain.handle('update:getState', async () => updateService.getState());
+  ipcMain.handle('update:check', async () => updateService.checkForUpdates());
+  ipcMain.handle('update:download', async () => updateService.downloadUpdate());
+  ipcMain.handle('update:install', async () => updateService.installUpdateAndRestart());
 
   ipcMain.handle('shell:openExternal', async (_event, url: string) => {
     await shell.openExternal(url);
