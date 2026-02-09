@@ -9,7 +9,7 @@ Electron desktop app for syncing World of Warcraft addon folders across multiple
 - Optional profile sync: sync an additional WoW profile/config path (for example `WTF` or `SavedVariables`).
 - Local config persistence through Electron `userData`.
 - Automatic Git detection (`PATH` plus common Windows Git locations) with optional explicit Git binary path in UI.
-- Built-in in-place app updater (check, download, install-and-restart) powered by GitHub Releases.
+- Built-in in-place app updater (check, download, silent apply + restart) powered by GitHub Releases.
 - Commit trust checks for client ingest:
   - trusted author email allowlist
   - optional signed-commit enforcement

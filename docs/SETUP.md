@@ -46,7 +46,7 @@ This guide describes one source machine and one or more client machines.
 8. Use `App Updates`:
    - `Check for Updates`
    - `Download` when a release is available
-   - `Install and Restart` to apply in place
+   - `Restart to Apply Update` to apply in place (silent installer flow)
 
 ## 4. Trust validation behavior
 
