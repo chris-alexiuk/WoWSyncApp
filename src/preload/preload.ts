@@ -1,6 +1,6 @@
 import { contextBridge, ipcRenderer } from 'electron';
 import type { WoWSyncApi } from '../shared/api';
-import type { AppConfig, SyncState, UpdateCheckResult } from '../shared/types';
+import type { AppConfig, SyncState, UpdateCheckResult, WindowState } from '../shared/types';
 
 const api: WoWSyncApi = {
   loadConfig: () => ipcRenderer.invoke('config:load'),
@@ -13,6 +13,18 @@ const api: WoWSyncApi = {
   pickGitBinary: (currentPath?: string) => ipcRenderer.invoke('dialog:pickGitBinary', currentPath),
   checkForAppUpdate: () => ipcRenderer.invoke('update:check') as Promise<UpdateCheckResult>,
   openExternalUrl: (url: string) => ipcRenderer.invoke('shell:openExternal', url),
+  getWindowState: () => ipcRenderer.invoke('window:getState') as Promise<WindowState>,
+  usesCustomWindowChrome: () => ipcRenderer.invoke('window:usesCustomChrome') as Promise<boolean>,
+  minimizeWindow: () => ipcRenderer.invoke('window:minimize'),
+  toggleMaximizeWindow: () => ipcRenderer.invoke('window:toggleMaximize') as Promise<WindowState>,
+  closeWindow: () => ipcRenderer.invoke('window:close'),
+  onWindowState: (callback) => {
+    const handler = (_event: Electron.IpcRendererEvent, state: WindowState) => callback(state);
+    ipcRenderer.on('window:state', handler);
+    return () => {
+      ipcRenderer.removeListener('window:state', handler);
+    };
+  },
   onState: (callback) => {
     const handler = (_event: Electron.IpcRendererEvent, state: SyncState) => callback(state);
     ipcRenderer.on('sync:state', handler);

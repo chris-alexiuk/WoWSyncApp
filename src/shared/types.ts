@@ -42,3 +42,7 @@ export interface UpdateCheckResult {
   notes: string | null;
   message: string;
 }
+
+export interface WindowState {
+  isMaximized: boolean;
+}

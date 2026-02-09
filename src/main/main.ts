@@ -10,12 +10,27 @@ import {
 import { loadConfig, saveConfig } from './configStore';
 import { SyncService } from './syncService';
 import { checkForAppUpdate } from './updateService';
-import type { AppConfig, SyncState } from '../shared/types';
+import type { AppConfig, SyncState, WindowState } from '../shared/types';
 
 let mainWindow: BrowserWindow | null = null;
+const useCustomWindowChrome = process.platform !== 'darwin';
 const syncService = new SyncService((state: SyncState) => {
   mainWindow?.webContents.send('sync:state', state);
 });
+
+function currentWindowState(): WindowState {
+  return {
+    isMaximized: mainWindow?.isMaximized() ?? false,
+  };
+}
+
+function emitWindowState(): void {
+  if (!mainWindow) {
+    return;
+  }
+
+  mainWindow.webContents.send('window:state', currentWindowState());
+}
 
 async function createWindow(): Promise<void> {
   mainWindow = new BrowserWindow({
@@ -24,7 +39,9 @@ async function createWindow(): Promise<void> {
     minWidth: 1100,
     minHeight: 720,
     backgroundColor: '#05070d',
-    titleBarStyle: 'hiddenInset',
+    frame: !useCustomWindowChrome,
+    titleBarStyle: useCustomWindowChrome ? 'hidden' : 'hiddenInset',
+    autoHideMenuBar: true,
     webPreferences: {
       preload: path.join(__dirname, '../preload/preload.js'),
       contextIsolation: true,
@@ -32,12 +49,21 @@ async function createWindow(): Promise<void> {
     },
   });
 
+  mainWindow.on('maximize', emitWindowState);
+  mainWindow.on('unmaximize', emitWindowState);
+  mainWindow.on('enter-full-screen', emitWindowState);
+  mainWindow.on('leave-full-screen', emitWindowState);
+  mainWindow.on('focus', emitWindowState);
+  mainWindow.on('blur', emitWindowState);
+
   const devUrl = process.env.VITE_DEV_SERVER_URL;
   if (devUrl) {
     await mainWindow.loadURL(devUrl);
   } else {
     await mainWindow.loadFile(path.join(__dirname, '../renderer/index.html'));
   }
+
+  emitWindowState();
 }
 
 function registerIpc(): void {
@@ -66,6 +92,35 @@ function registerIpc(): void {
 
   ipcMain.handle('shell:openExternal', async (_event, url: string) => {
     await shell.openExternal(url);
+    return { ok: true };
+  });
+
+  ipcMain.handle('window:getState', async () => currentWindowState());
+  ipcMain.handle('window:usesCustomChrome', async () => useCustomWindowChrome);
+
+  ipcMain.handle('window:minimize', async () => {
+    mainWindow?.minimize();
+    return { ok: true };
+  });
+
+  ipcMain.handle('window:toggleMaximize', async () => {
+    if (!mainWindow) {
+      return { isMaximized: false };
+    }
+
+    if (mainWindow.isMaximized()) {
+      mainWindow.unmaximize();
+    } else {
+      mainWindow.maximize();
+    }
+
+    const state = currentWindowState();
+    emitWindowState();
+    return state;
+  });
+
+  ipcMain.handle('window:close', async () => {
+    mainWindow?.close();
     return { ok: true };
   });
 
