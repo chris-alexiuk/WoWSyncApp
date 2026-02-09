@@ -33,7 +33,18 @@ export interface SyncRunResult {
   message: string;
 }
 
-export interface UpdateCheckResult {
+export type AppUpdatePhase =
+  | 'idle'
+  | 'checking'
+  | 'available'
+  | 'not-available'
+  | 'downloading'
+  | 'downloaded'
+  | 'error'
+  | 'unsupported';
+
+export interface AppUpdateState {
+  phase: AppUpdatePhase;
   currentVersion: string;
   latestVersion: string | null;
   hasUpdate: boolean;
@@ -41,6 +52,14 @@ export interface UpdateCheckResult {
   publishedAt: string | null;
   notes: string | null;
   message: string;
+  checkedAt: string | null;
+  downloadPercent: number | null;
+  bytesPerSecond: number | null;
+  transferredBytes: number | null;
+  totalBytes: number | null;
+  canCheck: boolean;
+  canDownload: boolean;
+  canInstall: boolean;
 }
 
 export interface WindowState {
