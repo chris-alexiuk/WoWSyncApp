@@ -27,29 +27,47 @@ function getConfigPath(): string {
   return path.join(app.getPath('userData'), 'config.json');
 }
 
+/** Ensure loaded config has all expected keys with sane fallbacks. */
+function sanitizeConfig(raw: Partial<AppConfig>): AppConfig {
+  const migratedPreset =
+    raw.profileSyncPreset ?? (raw.syncProfiles ? 'full_wtf' : DEFAULT_CONFIG.profileSyncPreset);
+
+  return {
+    ...DEFAULT_CONFIG,
+    ...raw,
+    profileSyncPreset: migratedPreset,
+    syncProfiles: migratedPreset !== 'addons_only',
+    trustedAuthorEmails: Array.isArray(raw.trustedAuthorEmails)
+      ? raw.trustedAuthorEmails
+      : DEFAULT_CONFIG.trustedAuthorEmails,
+  };
+}
+
 export async function loadConfig(): Promise<AppConfig> {
   const filePath = getConfigPath();
 
   try {
     const raw = await fs.readFile(filePath, 'utf8');
     const parsed = JSON.parse(raw) as Partial<AppConfig>;
-    const migratedPreset =
-      parsed.profileSyncPreset ?? (parsed.syncProfiles ? 'full_wtf' : DEFAULT_CONFIG.profileSyncPreset);
-
-    return {
-      ...DEFAULT_CONFIG,
-      ...parsed,
-      profileSyncPreset: migratedPreset,
-      syncProfiles: migratedPreset !== 'addons_only',
-      trustedAuthorEmails: parsed.trustedAuthorEmails ?? DEFAULT_CONFIG.trustedAuthorEmails,
-    };
+    return sanitizeConfig(parsed);
   } catch {
-    return DEFAULT_CONFIG;
+    return { ...DEFAULT_CONFIG };
   }
 }
 
 export async function saveConfig(config: AppConfig): Promise<void> {
   const filePath = getConfigPath();
-  await fs.mkdir(path.dirname(filePath), { recursive: true });
-  await fs.writeFile(filePath, JSON.stringify(config, null, 2), 'utf8');
+  const dir = path.dirname(filePath);
+  await fs.mkdir(dir, { recursive: true });
+
+  // Atomic write: write to temp file then rename to avoid partial writes.
+  const tmpFile = path.join(dir, `.config-${process.pid}-${Date.now()}.tmp`);
+  try {
+    await fs.writeFile(tmpFile, JSON.stringify(config, null, 2), 'utf8');
+    await fs.rename(tmpFile, filePath);
+  } catch (error) {
+    // Clean up temp file on failure.
+    try { await fs.unlink(tmpFile); } catch {}
+    throw error;
+  }
 }
