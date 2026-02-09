@@ -185,10 +185,10 @@ export class GitSyncEngine {
     await git.remote(['set-url', 'origin', authRepoUrl]);
     await git.fetch('origin');
 
-    await git.addConfig('user.name', config.authorName.trim() || 'WoW Sync Bot', false, 'local');
+    await git.addConfig('user.name', config.authorName.trim() || 'AzerSync Bot', false, 'local');
     await git.addConfig(
       'user.email',
-      config.authorEmail.trim() || 'wow-sync-bot@example.local',
+      config.authorEmail.trim() || 'azersync-bot@example.local',
       false,
       'local',
     );

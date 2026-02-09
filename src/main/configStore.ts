@@ -5,7 +5,7 @@ import type { AppConfig } from '../shared/types';
 
 const DEFAULT_CONFIG: AppConfig = {
   mode: 'source',
-  machineLabel: 'Primary Machine',
+  machineLabel: 'AzerSync Source',
   repoUrl: '',
   branch: 'development',
   githubToken: '',
@@ -18,8 +18,8 @@ const DEFAULT_CONFIG: AppConfig = {
   syncIntervalSeconds: 30,
   trustedAuthorEmails: [],
   requireSignedCommits: false,
-  authorName: 'WoW Sync Bot',
-  authorEmail: 'wow-sync-bot@example.local',
+  authorName: 'AzerSync Bot',
+  authorEmail: 'azersync-bot@example.local',
 };
 
 function getConfigPath(): string {
