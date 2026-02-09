@@ -389,7 +389,7 @@ export function App(): JSX.Element {
                   : 'Download Update'}
             </button>
             <button type="button" className="primary" onClick={installUpdate} disabled={!updateState.canInstall}>
-              Install and Restart
+              Restart to Apply Update
             </button>
             <button
               type="button"

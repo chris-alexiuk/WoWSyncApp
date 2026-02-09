@@ -76,7 +76,8 @@ export class UpdateService {
     this.state = this.createSupportedState();
 
     autoUpdater.autoDownload = false;
-    autoUpdater.autoInstallOnAppQuit = true;
+    // Keep apply explicit so we can force silent installer args on Windows.
+    autoUpdater.autoInstallOnAppQuit = false;
 
     autoUpdater.on('checking-for-update', () => {
       this.setState({
@@ -137,7 +138,7 @@ export class UpdateService {
         hasUpdate: true,
         checkedAt: new Date().toISOString(),
         downloadPercent: 100,
-        message: `Update ready: v${this.state.latestVersion ?? 'unknown'}. Install and restart when ready.`,
+        message: `Update ready: v${this.state.latestVersion ?? 'unknown'}. Restart to apply.`,
         canCheck: true,
         canDownload: false,
         canInstall: true,
@@ -220,10 +221,11 @@ export class UpdateService {
     }
 
     setImmediate(() => {
-      autoUpdater.quitAndInstall();
+      // Use silent mode for NSIS so users do not get installer wizard prompts.
+      autoUpdater.quitAndInstall(true, true);
     });
 
-    return { ok: true, message: 'Installing update and restarting app...' };
+    return { ok: true, message: 'Applying update silently and restarting app...' };
   }
 
   private createSupportedState(): AppUpdateState {
