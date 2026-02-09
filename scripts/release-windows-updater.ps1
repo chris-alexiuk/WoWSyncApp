@@ -82,13 +82,19 @@ if (-not (Test-Path $latestYmlPath)) {
   throw "Missing updater metadata file: $latestYmlPath"
 }
 
-$latestYmlText = Get-Content -Raw -Path $latestYmlPath
-$pathMatch = [regex]::Match($latestYmlText, '(?m)^path:\s*["'']?([^"'']+)["'']?\s*$')
-if (-not $pathMatch.Success) {
+$pathLine = Get-Content -Path $latestYmlPath |
+  Where-Object { $_ -match '^\s*path\s*:' } |
+  Select-Object -First 1
+
+if (-not $pathLine) {
   throw "Unable to parse installer filename from latest.yml path field."
 }
 
-$expectedInstallerName = $pathMatch.Groups[1].Value.Trim()
+$expectedInstallerName = ($pathLine -replace '^\s*path\s*:\s*', '').Trim().Trim("'`"")
+if (-not $expectedInstallerName) {
+  throw "Parsed installer filename from latest.yml path field is empty."
+}
+
 $expectedInstallerPath = Join-Path $releaseDir $expectedInstallerName
 
 if (-not (Test-Path $expectedInstallerPath)) {
