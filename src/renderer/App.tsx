@@ -7,6 +7,8 @@ import type {
   WindowState,
 } from '../shared/types';
 
+type AppView = 'dashboard' | 'sync' | 'settings';
+
 const EMPTY_STATE: SyncState = {
   running: false,
   inFlight: false,
@@ -39,6 +41,12 @@ const EMPTY_UPDATE_STATE: AppUpdateState = {
   canInstall: false,
 };
 
+const VIEWS: Array<{ id: AppView; label: string }> = [
+  { id: 'dashboard', label: 'Dashboard' },
+  { id: 'sync', label: 'Sync' },
+  { id: 'settings', label: 'Settings' },
+];
+
 function emailsToText(emails: string[]): string {
   return emails.join(', ');
 }
@@ -50,6 +58,66 @@ function textToEmails(text: string): string[] {
     .filter(Boolean);
 }
 
+function modeLabel(modeValue: SyncMode): string {
+  return modeValue === 'source' ? 'Source (Push)' : 'Client (Pull)';
+}
+
+function asErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+function formatDate(iso: string | null): string {
+  if (!iso) {
+    return 'Never';
+  }
+
+  return new Date(iso).toLocaleString();
+}
+
+function formatMegabytes(bytes: number | null): string {
+  if (!bytes || Number.isNaN(bytes)) {
+    return '0 MB';
+  }
+
+  return `${Math.round(bytes / 1024 / 1024)} MB`;
+}
+
+function AzerSyncMark(): JSX.Element {
+  return (
+    <svg viewBox="0 0 64 64" aria-hidden="true" focusable="false">
+      <defs>
+        <linearGradient id="azersync-mark-gradient" x1="8" y1="10" x2="56" y2="54" gradientUnits="userSpaceOnUse">
+          <stop offset="0" stopColor="#72f4cd" />
+          <stop offset="1" stopColor="#4f8cff" />
+        </linearGradient>
+      </defs>
+      <rect x="6" y="6" width="52" height="52" rx="16" fill="url(#azersync-mark-gradient)" />
+      <path
+        d="M20 40L30 20L44 44M24 32H38"
+        fill="none"
+        stroke="#07121f"
+        strokeWidth="5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M47 18C51 23 53 30 53 37"
+        fill="none"
+        stroke="#07121f"
+        strokeWidth="4"
+        strokeLinecap="round"
+      />
+      <path
+        d="M15 46C11 41 9 34 9 27"
+        fill="none"
+        stroke="#07121f"
+        strokeWidth="4"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}
+
 export function App(): JSX.Element {
   const [config, setConfig] = useState<AppConfig | null>(null);
   const [trustedEmailsText, setTrustedEmailsText] = useState('');
@@ -59,6 +127,7 @@ export function App(): JSX.Element {
   const [updateState, setUpdateState] = useState<AppUpdateState>(EMPTY_UPDATE_STATE);
   const [windowState, setWindowState] = useState<WindowState>(EMPTY_WINDOW_STATE);
   const [useCustomWindowChrome, setUseCustomWindowChrome] = useState(true);
+  const [activeView, setActiveView] = useState<AppView>('dashboard');
 
   useEffect(() => {
     let unsubscribeSyncState = () => {};
@@ -81,8 +150,7 @@ export function App(): JSX.Element {
           await window.wowSync.checkForAppUpdate();
         }
       } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        setStatus(`Failed to load config: ${message}`);
+        setStatus(`Failed to load config: ${asErrorMessage(error)}`);
       }
     })();
 
@@ -160,6 +228,8 @@ export function App(): JSX.Element {
     return true;
   }, [config, mode, trustConfigured]);
 
+  const syncStatus = state.inFlight ? 'Syncing' : state.running ? 'Auto Sync On' : 'Idle';
+
   const patchConfig = (patch: Partial<AppConfig>) => {
     setConfig((prev) => (prev ? { ...prev, ...patch } : prev));
   };
@@ -176,32 +246,53 @@ export function App(): JSX.Element {
   };
 
   const saveConfig = async () => {
+    if (!config) {
+      return;
+    }
+
     setSaving(true);
     const nextConfig = currentConfig();
 
-    await window.wowSync.saveConfig(nextConfig);
-    setConfig(nextConfig);
-    setSaving(false);
-    setStatus('Config saved');
+    try {
+      await window.wowSync.saveConfig(nextConfig);
+      setConfig(nextConfig);
+      setStatus('Settings saved');
+    } catch (error) {
+      setStatus(`Save failed: ${asErrorMessage(error)}`);
+    } finally {
+      setSaving(false);
+    }
   };
 
   const runNow = async () => {
-    setStatus('Running sync...');
-    const result = await window.wowSync.runSyncNow(currentConfig());
-    setStatus(result.message);
+    try {
+      setStatus('Running sync...');
+      const result = await window.wowSync.runSyncNow(currentConfig());
+      setStatus(result.message);
+    } catch (error) {
+      setStatus(`Sync failed: ${asErrorMessage(error)}`);
+    }
   };
 
   const startAutoSync = async () => {
-    const nextConfig = currentConfig();
-    await window.wowSync.saveConfig(nextConfig);
-    setConfig(nextConfig);
-    await window.wowSync.startSync(nextConfig);
-    setStatus('Auto-sync running');
+    try {
+      const nextConfig = currentConfig();
+      await window.wowSync.saveConfig(nextConfig);
+      setConfig(nextConfig);
+      await window.wowSync.startSync(nextConfig);
+      setStatus('Auto-sync running');
+    } catch (error) {
+      setStatus(`Failed to start auto-sync: ${asErrorMessage(error)}`);
+    }
   };
 
   const stopAutoSync = async () => {
-    await window.wowSync.stopSync();
-    setStatus('Auto-sync stopped');
+    try {
+      await window.wowSync.stopSync();
+      setStatus('Auto-sync stopped');
+    } catch (error) {
+      setStatus(`Failed to stop auto-sync: ${asErrorMessage(error)}`);
+    }
   };
 
   const pickDir = async (
@@ -229,13 +320,21 @@ export function App(): JSX.Element {
   };
 
   const checkForUpdates = async () => {
-    const result = await window.wowSync.checkForAppUpdate();
-    setUpdateState(result);
+    try {
+      const result = await window.wowSync.checkForAppUpdate();
+      setUpdateState(result);
+    } catch (error) {
+      setStatus(`Update check failed: ${asErrorMessage(error)}`);
+    }
   };
 
   const downloadUpdate = async () => {
-    const result = await window.wowSync.downloadAppUpdate();
-    setUpdateState(result);
+    try {
+      const result = await window.wowSync.downloadAppUpdate();
+      setUpdateState(result);
+    } catch (error) {
+      setStatus(`Download failed: ${asErrorMessage(error)}`);
+    }
   };
 
   const installUpdate = async () => {
@@ -264,22 +363,13 @@ export function App(): JSX.Element {
     await window.wowSync.closeWindow();
   };
 
-  const formatDate = (iso: string | null) => {
-    if (!iso) {
-      return 'Never';
-    }
-
-    return new Date(iso).toLocaleString();
-  };
-
-  const modeLabel = (modeValue: SyncMode) =>
-    modeValue === 'source' ? 'Source Machine (Push)' : 'Client Machine (Pull)';
-
   const windowChrome = useCustomWindowChrome ? (
     <header className="window-chrome">
       <div className="window-chrome__title">
-        <span className="window-chrome__dot" />
-        WoW Sync App
+        <span className="window-brand-mark">
+          <AzerSyncMark />
+        </span>
+        AzerSync
       </div>
       <div className="window-chrome__controls">
         <button type="button" className="window-btn" onClick={minimizeWindow} aria-label="Minimize window">
@@ -305,9 +395,16 @@ export function App(): JSX.Element {
       <main className="app-shell">
         {windowChrome}
         <div className="app-content">
-          <section className="panel hero">
-            <h1>WoW Sync App</h1>
-            <p>{status}</p>
+          <section className="panel loading-panel">
+            <div className="loading-brand">
+              <span className="brand-mark" aria-hidden="true">
+                <AzerSyncMark />
+              </span>
+              <div>
+                <h1>AzerSync</h1>
+                <p>{status}</p>
+              </div>
+            </div>
           </section>
         </div>
       </main>
@@ -318,264 +415,347 @@ export function App(): JSX.Element {
     <main className="app-shell">
       {windowChrome}
       <div className="app-content">
-        <section className="panel hero">
-          <div className="hero-brand">
-            <span className="badge">v0 prototype</span>
-            <h1>WoW Sync App</h1>
-            <p>Keep addon folders aligned across machines through one shared GitHub flow.</p>
+        <section className="panel masthead">
+          <div className="masthead__left">
+            <div className="brand-lockup">
+              <span className="brand-mark" aria-hidden="true">
+                <AzerSyncMark />
+              </span>
+              <div>
+                <p className="brand-eyebrow">WoW Addon Fleet Sync</p>
+                <h1>AzerSync</h1>
+                <p className="brand-subtle">Keep AddOns and WTF profiles aligned across every machine.</p>
+              </div>
+            </div>
+            <nav className="view-nav" aria-label="App sections">
+              {VIEWS.map((view) => (
+                <button
+                  key={view.id}
+                  type="button"
+                  className={activeView === view.id ? 'active' : ''}
+                  onClick={() => setActiveView(view.id)}
+                >
+                  {view.label}
+                </button>
+              ))}
+            </nav>
           </div>
-          <div className="hero-metrics">
+          <div className="masthead__right">
             <article>
-              <h3>Status</h3>
-              <p>{state.inFlight ? 'Syncing now' : state.running ? 'Auto-sync ON' : 'Idle'}</p>
-            </article>
-            <article>
-              <h3>Last Success</h3>
-              <p>{formatDate(state.lastSuccessAt)}</p>
+              <h3>Sync Status</h3>
+              <p>{syncStatus}</p>
             </article>
             <article>
               <h3>Mode</h3>
               <p>{modeLabel(mode)}</p>
             </article>
+            <article>
+              <h3>Last Success</h3>
+              <p>{formatDate(state.lastSuccessAt)}</p>
+            </article>
           </div>
         </section>
 
-        <section className="panel updates">
-          <header>
-            <h2>App Updates</h2>
-            <p>{updateState.message}</p>
-          </header>
-          <div className="update-grid">
-            <article>
-              <h3>Current Version</h3>
-              <p>{updateState.currentVersion ? `v${updateState.currentVersion}` : 'Unknown'}</p>
-            </article>
-            <article>
-              <h3>Latest Release</h3>
-              <p>{updateState.latestVersion ? `v${updateState.latestVersion}` : 'Unknown'}</p>
-            </article>
-            <article>
-              <h3>Published</h3>
-              <p>{formatDate(updateState.publishedAt)}</p>
-            </article>
-            <article>
-              <h3>Last Check</h3>
-              <p>{formatDate(updateState.checkedAt)}</p>
-            </article>
-          </div>
-          {updateState.downloadPercent !== null ? (
-            <p>
-              Download: {updateState.downloadPercent.toFixed(1)}%{' '}
-              {updateState.totalBytes
-                ? `(${Math.round((updateState.transferredBytes ?? 0) / 1024 / 1024)}MB / ${Math.round(updateState.totalBytes / 1024 / 1024)}MB)`
-                : ''}
-            </p>
-          ) : null}
-          {updateState.notes ? <pre className="update-notes">{updateState.notes}</pre> : null}
-          <div className="actions">
-            <button type="button" onClick={checkForUpdates} disabled={!updateState.canCheck}>
-              {updateState.phase === 'checking' ? 'Checking...' : 'Check for Updates'}
-            </button>
-            <button
-              type="button"
-              className="primary"
-              onClick={downloadUpdate}
-              disabled={!updateState.canDownload}
-            >
-              {updateState.phase === 'downloading'
-                ? 'Downloading...'
-                : updateState.latestVersion
-                  ? `Download v${updateState.latestVersion}`
-                  : 'Download Update'}
-            </button>
-            <button type="button" className="primary" onClick={installUpdate} disabled={!updateState.canInstall}>
-              Restart to Apply Update
-            </button>
-            <button
-              type="button"
-              onClick={openLatestRelease}
-              disabled={!updateState.releaseUrl}
-            >
-              Open Release Page
-            </button>
-          </div>
-        </section>
+        {activeView === 'dashboard' ? (
+          <>
+            <section className="panel quick-panel">
+              <header>
+                <h2>Quick Actions</h2>
+                <p>{status}</p>
+              </header>
+              <div className="actions">
+                <button type="button" className="primary" onClick={runNow} disabled={!canSave || state.inFlight}>
+                  {state.inFlight ? 'Syncing...' : 'Sync Now'}
+                </button>
+                <button type="button" onClick={startAutoSync} disabled={!canSave || state.inFlight}>
+                  Start Auto Sync
+                </button>
+                <button type="button" className="ghost" onClick={stopAutoSync}>
+                  Stop
+                </button>
+                <button type="button" className="primary" disabled={!canSave || saving} onClick={saveConfig}>
+                  {saving ? 'Saving...' : 'Save Settings'}
+                </button>
+              </div>
+            </section>
 
-        <section className="panel controls">
-          <header>
-            <h2>Configuration</h2>
-            <p>{status}</p>
-          </header>
+            <section className="panel updates updates--compact">
+              <header>
+                <h2>App Updates</h2>
+                <p>{updateState.message}</p>
+              </header>
+              <div className="update-summary-row">
+                <article>
+                  <h3>Current</h3>
+                  <p>{updateState.currentVersion ? `v${updateState.currentVersion}` : 'Unknown'}</p>
+                </article>
+                <article>
+                  <h3>Latest</h3>
+                  <p>{updateState.latestVersion ? `v${updateState.latestVersion}` : 'Unknown'}</p>
+                </article>
+                <article>
+                  <h3>Checked</h3>
+                  <p>{formatDate(updateState.checkedAt)}</p>
+                </article>
+              </div>
+              {updateState.downloadPercent !== null ? (
+                <div className="download-progress-wrap">
+                  <div className="download-progress" role="presentation">
+                    <span style={{ width: `${Math.max(0, Math.min(100, updateState.downloadPercent))}%` }} />
+                  </div>
+                  <p>
+                    {updateState.downloadPercent.toFixed(1)}% ({formatMegabytes(updateState.transferredBytes)} /{' '}
+                    {formatMegabytes(updateState.totalBytes)})
+                  </p>
+                </div>
+              ) : null}
+              <div className="actions">
+                <button type="button" onClick={checkForUpdates} disabled={!updateState.canCheck}>
+                  {updateState.phase === 'checking' ? 'Checking...' : 'Check'}
+                </button>
+                <button type="button" className="primary" onClick={downloadUpdate} disabled={!updateState.canDownload}>
+                  {updateState.phase === 'downloading' ? 'Downloading...' : 'Download'}
+                </button>
+                <button type="button" className="primary" onClick={installUpdate} disabled={!updateState.canInstall}>
+                  Restart to Apply
+                </button>
+                <button type="button" onClick={openLatestRelease} disabled={!updateState.releaseUrl}>
+                  Release Page
+                </button>
+              </div>
+              {updateState.notes ? (
+                <details className="update-details">
+                  <summary>Release notes</summary>
+                  <pre className="update-notes">{updateState.notes}</pre>
+                </details>
+              ) : null}
+            </section>
 
-          <div className="mode-toggle" role="radiogroup" aria-label="Sync mode">
-            {(['source', 'client'] as SyncMode[]).map((option) => (
-              <button
-                key={option}
-                className={option === mode ? 'active' : ''}
-                onClick={() => patchConfig({ mode: option })}
-                type="button"
-              >
-                {modeLabel(option)}
+            <section className="panel logs">
+              <header>
+                <h2>Activity</h2>
+                <p>{state.lastError ? `Error: ${state.lastError}` : 'No active errors'}</p>
+              </header>
+              <div className="runtime-grid">
+                <article>
+                  <h3>Last Run</h3>
+                  <p>{formatDate(state.lastRunAt)}</p>
+                </article>
+                <article>
+                  <h3>Last Success</h3>
+                  <p>{formatDate(state.lastSuccessAt)}</p>
+                </article>
+                <article>
+                  <h3>Process</h3>
+                  <p>{state.inFlight ? 'Sync in progress' : state.running ? 'Auto mode active' : 'Manual mode'}</p>
+                </article>
+              </div>
+              <pre className="log-view">{state.logs.join('\n') || 'No logs yet'}</pre>
+            </section>
+          </>
+        ) : null}
+
+        {activeView === 'sync' ? (
+          <section className="panel controls">
+            <header>
+              <h2>Sync Paths & Runtime</h2>
+              <p>{modeLabel(mode)}</p>
+            </header>
+
+            <div className="mode-toggle" role="radiogroup" aria-label="Sync mode">
+              {(['source', 'client'] as SyncMode[]).map((option) => (
+                <button
+                  key={option}
+                  className={option === mode ? 'active' : ''}
+                  onClick={() => patchConfig({ mode: option })}
+                  type="button"
+                >
+                  {modeLabel(option)}
+                </button>
+              ))}
+            </div>
+
+            <label className="checkbox-line">
+              <input
+                type="checkbox"
+                checked={config.syncProfiles}
+                onChange={(event) => patchConfig({ syncProfiles: event.target.checked })}
+              />
+              Sync profile/config folder too (WTF / SavedVariables)
+            </label>
+
+            {mode === 'source' ? (
+              <>
+                <label>
+                  Source AddOns Folder
+                  <div className="inline-field">
+                    <input
+                      value={config.sourceAddonsPath}
+                      onChange={(event) => patchConfig({ sourceAddonsPath: event.target.value })}
+                      placeholder="/path/to/Interface/AddOns"
+                    />
+                    <button type="button" onClick={() => pickDir('sourceAddonsPath')}>
+                      Browse
+                    </button>
+                  </div>
+                </label>
+                {config.syncProfiles ? (
+                  <label>
+                    Source Profiles Folder
+                    <div className="inline-field">
+                      <input
+                        value={config.sourceProfilesPath}
+                        onChange={(event) => patchConfig({ sourceProfilesPath: event.target.value })}
+                        placeholder="/path/to/WTF or .../SavedVariables"
+                      />
+                      <button type="button" onClick={() => pickDir('sourceProfilesPath')}>
+                        Browse
+                      </button>
+                    </div>
+                  </label>
+                ) : null}
+              </>
+            ) : (
+              <>
+                <label>
+                  Client AddOns Folder
+                  <div className="inline-field">
+                    <input
+                      value={config.targetAddonsPath}
+                      onChange={(event) => patchConfig({ targetAddonsPath: event.target.value })}
+                      placeholder="/path/to/Interface/AddOns"
+                    />
+                    <button type="button" onClick={() => pickDir('targetAddonsPath')}>
+                      Browse
+                    </button>
+                  </div>
+                </label>
+                {config.syncProfiles ? (
+                  <label>
+                    Client Profiles Folder
+                    <div className="inline-field">
+                      <input
+                        value={config.targetProfilesPath}
+                        onChange={(event) => patchConfig({ targetProfilesPath: event.target.value })}
+                        placeholder="/path/to/WTF or .../SavedVariables"
+                      />
+                      <button type="button" onClick={() => pickDir('targetProfilesPath')}>
+                        Browse
+                      </button>
+                    </div>
+                  </label>
+                ) : null}
+              </>
+            )}
+
+            <div className="grid two-up">
+              <label>
+                Sync Interval (seconds)
+                <input
+                  type="number"
+                  min={10}
+                  value={config.syncIntervalSeconds}
+                  onChange={(event) =>
+                    patchConfig({ syncIntervalSeconds: Math.max(10, Number(event.target.value) || 10) })
+                  }
+                />
+              </label>
+              <label>
+                Machine Label
+                <input
+                  value={config.machineLabel}
+                  onChange={(event) => patchConfig({ machineLabel: event.target.value })}
+                  placeholder="Raid-PC-Source"
+                />
+              </label>
+            </div>
+
+            <div className="actions">
+              <button type="button" className="primary" onClick={runNow} disabled={!canSave || state.inFlight}>
+                {state.inFlight ? 'Syncing...' : 'Sync Now'}
               </button>
-            ))}
-          </div>
-
-          <div className="grid two-up">
-            <label>
-              Machine Label
-              <input
-                value={config.machineLabel}
-                onChange={(event) => patchConfig({ machineLabel: event.target.value })}
-                placeholder="Raid-PC-Source"
-              />
-            </label>
-            <label>
-              Branch
-              <input
-                value={config.branch}
-                onChange={(event) => patchConfig({ branch: event.target.value })}
-                placeholder="development"
-              />
-            </label>
-          </div>
-
-          <label>
-            GitHub Repository URL
-            <input
-              value={config.repoUrl}
-              onChange={(event) => patchConfig({ repoUrl: event.target.value })}
-              placeholder="https://github.com/your-org/wow-sync-data.git"
-            />
-          </label>
-
-          <label>
-            GitHub Token (PAT)
-            <input
-              type="password"
-              value={config.githubToken}
-              onChange={(event) => patchConfig({ githubToken: event.target.value })}
-              placeholder="ghp_..."
-            />
-          </label>
-
-          <label>
-            Git Binary Path (optional)
-            <div className="inline-field">
-              <input
-                value={config.gitBinaryPath}
-                onChange={(event) => patchConfig({ gitBinaryPath: event.target.value })}
-                placeholder="C:\\Program Files\\Git\\cmd\\git.exe or /usr/bin/git"
-              />
-              <button type="button" onClick={pickGitBinary}>
-                Browse
+              <button type="button" onClick={startAutoSync} disabled={!canSave || state.inFlight}>
+                Start Auto Sync
+              </button>
+              <button type="button" className="ghost" onClick={stopAutoSync}>
+                Stop
+              </button>
+              <button type="button" className="primary" disabled={!canSave || saving} onClick={saveConfig}>
+                {saving ? 'Saving...' : 'Save Settings'}
               </button>
             </div>
-          </label>
+          </section>
+        ) : null}
 
-          <label className="checkbox-line">
-            <input
-              type="checkbox"
-              checked={config.syncProfiles}
-              onChange={(event) => patchConfig({ syncProfiles: event.target.checked })}
-            />
-            Sync profile/config folder too (WTF / SavedVariables)
-          </label>
+        {activeView === 'settings' ? (
+          <section className="panel controls">
+            <header>
+              <h2>Repository & Trust</h2>
+              <p>{status}</p>
+            </header>
 
-          {mode === 'source' ? (
-            <>
+            <div className="grid two-up">
               <label>
-                Source Addons Folder
+                Branch
+                <input
+                  value={config.branch}
+                  onChange={(event) => patchConfig({ branch: event.target.value })}
+                  placeholder="development"
+                />
+              </label>
+              <label>
+                Git Binary Path (optional)
                 <div className="inline-field">
                   <input
-                    value={config.sourceAddonsPath}
-                    onChange={(event) => patchConfig({ sourceAddonsPath: event.target.value })}
-                    placeholder="/path/to/Interface/AddOns"
+                    value={config.gitBinaryPath}
+                    onChange={(event) => patchConfig({ gitBinaryPath: event.target.value })}
+                    placeholder="C:\\Program Files\\Git\\cmd\\git.exe or /usr/bin/git"
                   />
-                  <button type="button" onClick={() => pickDir('sourceAddonsPath')}>
+                  <button type="button" onClick={pickGitBinary}>
                     Browse
                   </button>
                 </div>
               </label>
-              {config.syncProfiles ? (
-                <label>
-                  Source Profiles Folder
-                  <div className="inline-field">
-                    <input
-                      value={config.sourceProfilesPath}
-                      onChange={(event) => patchConfig({ sourceProfilesPath: event.target.value })}
-                      placeholder="/path/to/WTF or .../SavedVariables"
-                    />
-                    <button type="button" onClick={() => pickDir('sourceProfilesPath')}>
-                      Browse
-                    </button>
-                  </div>
-                </label>
-              ) : null}
-            </>
-          ) : (
-            <>
+            </div>
+
+            <label>
+              GitHub Repository URL
+              <input
+                value={config.repoUrl}
+                onChange={(event) => patchConfig({ repoUrl: event.target.value })}
+                placeholder="https://github.com/your-org/wow-sync-data.git"
+              />
+            </label>
+
+            <label>
+              GitHub Token (PAT)
+              <input
+                type="password"
+                value={config.githubToken}
+                onChange={(event) => patchConfig({ githubToken: event.target.value })}
+                placeholder="ghp_..."
+              />
+            </label>
+
+            <div className="grid two-up">
               <label>
-                Client Addons Folder
-                <div className="inline-field">
-                  <input
-                    value={config.targetAddonsPath}
-                    onChange={(event) => patchConfig({ targetAddonsPath: event.target.value })}
-                    placeholder="/path/to/Interface/AddOns"
-                  />
-                  <button type="button" onClick={() => pickDir('targetAddonsPath')}>
-                    Browse
-                  </button>
-                </div>
+                Git Author Name
+                <input
+                  value={config.authorName}
+                  onChange={(event) => patchConfig({ authorName: event.target.value })}
+                  placeholder="AzerSync Bot"
+                />
               </label>
-              {config.syncProfiles ? (
-                <label>
-                  Client Profiles Folder
-                  <div className="inline-field">
-                    <input
-                      value={config.targetProfilesPath}
-                      onChange={(event) => patchConfig({ targetProfilesPath: event.target.value })}
-                      placeholder="/path/to/WTF or .../SavedVariables"
-                    />
-                    <button type="button" onClick={() => pickDir('targetProfilesPath')}>
-                      Browse
-                    </button>
-                  </div>
-                </label>
-              ) : null}
-            </>
-          )}
+              <label>
+                Git Author Email
+                <input
+                  value={config.authorEmail}
+                  onChange={(event) => patchConfig({ authorEmail: event.target.value })}
+                  placeholder="azersync-bot@example.local"
+                />
+              </label>
+            </div>
 
-          <div className="grid two-up">
-            <label>
-              Git Author Name
-              <input
-                value={config.authorName}
-                onChange={(event) => patchConfig({ authorName: event.target.value })}
-                placeholder="WoW Sync Bot"
-              />
-            </label>
-            <label>
-              Git Author Email
-              <input
-                value={config.authorEmail}
-                onChange={(event) => patchConfig({ authorEmail: event.target.value })}
-                placeholder="wow-sync-bot@example.local"
-              />
-            </label>
-          </div>
-
-          <div className="grid two-up">
-            <label>
-              Sync Interval (seconds)
-              <input
-                type="number"
-                min={10}
-                value={config.syncIntervalSeconds}
-                onChange={(event) =>
-                  patchConfig({ syncIntervalSeconds: Math.max(10, Number(event.target.value) || 10) })
-                }
-              />
-            </label>
             <label className="checkbox-line">
               <input
                 type="checkbox"
@@ -584,60 +764,29 @@ export function App(): JSX.Element {
               />
               Require signed commits on client ingest
             </label>
-          </div>
 
-          <label>
-            Trusted Author Emails (comma separated)
-            <textarea
-              value={trustedEmailsText}
-              onChange={(event) => setTrustedEmailsText(event.target.value)}
-              placeholder="you@example.com, alt@example.com"
-            />
-          </label>
+            <label>
+              Trusted Author Emails (comma separated)
+              <textarea
+                value={trustedEmailsText}
+                onChange={(event) => setTrustedEmailsText(event.target.value)}
+                placeholder="you@example.com, alt@example.com"
+              />
+            </label>
 
-          {!trustConfigured ? (
-            <p className="inline-warning">
-              Configure trusted author emails or enable signed-commit requirement for client mode.
-            </p>
-          ) : null}
+            {!trustConfigured ? (
+              <p className="inline-warning">
+                Configure trusted emails or enable signed-commit enforcement for client mode.
+              </p>
+            ) : null}
 
-          <div className="actions">
-            <button type="button" className="primary" disabled={!canSave || saving} onClick={saveConfig}>
-              {saving ? 'Saving...' : 'Save Config'}
-            </button>
-            <button type="button" onClick={startAutoSync} disabled={!canSave || state.inFlight}>
-              Start Auto Sync
-            </button>
-            <button type="button" onClick={runNow} disabled={!canSave || state.inFlight}>
-              {state.inFlight ? 'Syncing...' : 'Sync Now'}
-            </button>
-            <button type="button" className="ghost" onClick={stopAutoSync}>
-              Stop
-            </button>
-          </div>
-        </section>
-
-        <section className="panel logs">
-          <header>
-            <h2>Runtime</h2>
-            <p>{state.lastError ? `Error: ${state.lastError}` : 'No active errors'}</p>
-          </header>
-          <div className="runtime-grid">
-            <article>
-              <h3>Last Run</h3>
-              <p>{formatDate(state.lastRunAt)}</p>
-            </article>
-            <article>
-              <h3>Last Success</h3>
-              <p>{formatDate(state.lastSuccessAt)}</p>
-            </article>
-            <article>
-              <h3>Process</h3>
-              <p>{state.inFlight ? 'Sync in progress' : state.running ? 'Auto mode active' : 'Manual mode'}</p>
-            </article>
-          </div>
-          <pre className="log-view">{state.logs.join('\n') || 'No logs yet'}</pre>
-        </section>
+            <div className="actions">
+              <button type="button" className="primary" disabled={!canSave || saving} onClick={saveConfig}>
+                {saving ? 'Saving...' : 'Save Settings'}
+              </button>
+            </div>
+          </section>
+        ) : null}
       </div>
     </main>
   );

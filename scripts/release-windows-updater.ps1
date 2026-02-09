@@ -133,7 +133,7 @@ if (-not $releaseExists) {
       "--target",
       $ReleaseTarget,
       "--title",
-      "WoW Sync App $Tag",
+      "AzerSync $Tag",
       "--notes",
       "Automated release bootstrap from release-windows-updater.ps1"
     ) `

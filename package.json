@@ -2,7 +2,7 @@
   "name": "wow-sync-app",
   "version": "0.1.9",
   "private": true,
-  "description": "Desktop sync app for WoW addons across machines",
+  "description": "AzerSync desktop app for syncing WoW addons across machines",
   "author": {
     "name": "Chris Alexiuk"
   },
@@ -14,6 +14,7 @@
     "dev:main": "tsc -p tsconfig.node.json --watch --preserveWatchOutput",
     "dev:electron": "wait-on tcp:5173 dist/main/main.js && cross-env VITE_DEV_SERVER_URL=http://localhost:5173 nodemon --watch dist/main --watch dist/preload --ext js --exec \"electron dist/main/main.js\"",
     "build": "bun run build:renderer && bun run build:main",
+    "generate:icons": "node scripts/generate-app-icons.mjs",
     "build:renderer": "vite build",
     "build:main": "tsc -p tsconfig.node.json",
     "typecheck": "tsc --noEmit && tsc -p tsconfig.node.json --noEmit",
@@ -49,9 +50,10 @@
   },
   "build": {
     "appId": "com.chrisalexiuk.wowsync",
-    "productName": "WoW Sync App",
+    "productName": "AzerSync",
     "directories": {
-      "output": "release"
+      "output": "release",
+      "buildResources": "build"
     },
     "files": [
       "dist/**/*",
@@ -63,7 +65,8 @@
         "AppImage",
         "tar.gz"
       ],
-      "category": "Utility"
+      "category": "Utility",
+      "icon": "build/icon.png"
     },
     "win": {
       "target": [
@@ -71,7 +74,8 @@
         "portable",
         "zip"
       ],
-      "signAndEditExecutable": false
+      "signAndEditExecutable": false,
+      "icon": "build/icon.ico"
     },
     "nsis": {
       "oneClick": false,

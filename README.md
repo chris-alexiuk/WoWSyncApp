@@ -1,4 +1,4 @@
-# WoW Sync App
+# AzerSync
 
 Electron desktop app for syncing World of Warcraft addon folders across multiple machines through a shared GitHub repository.
 
@@ -61,7 +61,7 @@ For in-place update delivery, each GitHub release must include the Windows updat
 Windows helper script (run on native Windows PowerShell):
 
 ```powershell
-.\scripts\release-windows-updater.ps1 -Tag v0.1.8
+.\scripts\release-windows-updater.ps1 -Tag v0.1.9
 ```
 
 This script builds the Windows NSIS installer, ensures the installer filename matches `latest.yml`, uploads updater assets (`latest.yml`, installer `.exe`, optional `.blockmap`) to an existing GitHub release, and validates the upload.
