@@ -58,6 +58,14 @@ Artifacts are written to `release/`.
 
 For in-place update delivery, each GitHub release must include the Windows updater metadata files (for example `latest.yml` plus the NSIS `.exe` package).
 
+Windows helper script (run on native Windows PowerShell):
+
+```powershell
+.\scripts\release-windows-updater.ps1 -Tag v0.1.8
+```
+
+This script builds the Windows NSIS installer, ensures the installer filename matches `latest.yml`, uploads updater assets (`latest.yml`, installer `.exe`, optional `.blockmap`) to an existing GitHub release, and validates the upload.
+
 ## Security model (v0)
 
 - Repository should be private.
