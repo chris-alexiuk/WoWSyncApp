@@ -1,0 +1,113 @@
+name: Windows Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag (example: v0.2.1)'
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: windows-release-${{ github.event_name == 'workflow_dispatch' && github.event.inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  windows-release:
+    runs-on: windows-latest
+    env:
+      RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.tag || github.ref_name }}
+    steps:
+      - name: Validate release tag format
+        shell: pwsh
+        run: |
+          if ($env:RELEASE_TAG -notmatch '^v[0-9]+\.[0-9]+\.[0-9]+(?:[-+][0-9A-Za-z.-]+)?$') {
+            throw "Invalid release tag '$env:RELEASE_TAG'. Expected format: vX.Y.Z"
+          }
+
+      - name: Checkout release ref
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.RELEASE_TAG }}
+          fetch-depth: 0
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Validate package version
+        shell: pwsh
+        run: |
+          $package = Get-Content -Raw package.json | ConvertFrom-Json
+          $expectedTag = "v$($package.version)"
+          if ($env:RELEASE_TAG -ne $expectedTag) {
+            throw "Tag '$env:RELEASE_TAG' does not match package.json version '$expectedTag'."
+          }
+          "APP_VERSION=$($package.version)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Build Windows updater artifacts
+        run: bun run dist:win:ci
+
+      - name: Collect release assets
+        id: assets
+        shell: pwsh
+        run: |
+          $installer = "release/AzerSync-$env:APP_VERSION-win-x64.exe"
+          $metadata = "release/latest.yml"
+
+          if (-not (Test-Path $installer)) {
+            throw "Missing installer artifact: $installer"
+          }
+
+          if (-not (Test-Path $metadata)) {
+            throw "Missing updater metadata: $metadata"
+          }
+
+          $assetPaths = @($installer, $metadata)
+          $blockmap = "$installer.blockmap"
+          if (Test-Path $blockmap) {
+            $assetPaths += $blockmap
+          }
+
+          $outputLines = @("files<<EOF")
+          $outputLines += $assetPaths
+          $outputLines += "EOF"
+          $outputLines -join "`n" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+
+      - name: Publish GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.RELEASE_TAG }}
+          name: AzerSync ${{ env.RELEASE_TAG }}
+          generate_release_notes: true
+          files: ${{ steps.assets.outputs.files }}
+          fail_on_unmatched_files: true
+          overwrite_files: true
+
+      - name: Verify release assets
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $release = gh release view $env:RELEASE_TAG --repo $env:GITHUB_REPOSITORY --json assets,url | ConvertFrom-Json
+          $assetNames = @($release.assets | ForEach-Object { $_.name })
+          $required = @(
+            "AzerSync-$env:APP_VERSION-win-x64.exe",
+            "latest.yml"
+          )
+
+          foreach ($asset in $required) {
+            if (-not ($assetNames -contains $asset)) {
+              throw "Release asset missing: $asset"
+            }
+          }
+
+          Write-Host "Release URL: $($release.url)"
