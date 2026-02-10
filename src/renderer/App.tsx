@@ -87,15 +87,15 @@ function AzerSyncMark(): JSX.Element {
     <svg viewBox="0 0 64 64" aria-hidden="true" focusable="false">
       <defs>
         <linearGradient id="azersync-mark-gradient" x1="8" y1="10" x2="56" y2="54" gradientUnits="userSpaceOnUse">
-          <stop offset="0" stopColor="#72f4cd" />
-          <stop offset="1" stopColor="#4f8cff" />
+          <stop offset="0" stopColor="#74e8c8" />
+          <stop offset="1" stopColor="#6f9eff" />
         </linearGradient>
       </defs>
       <rect x="6" y="6" width="52" height="52" rx="16" fill="url(#azersync-mark-gradient)" />
       <path
         d="M20 40L30 20L44 44M24 32H38"
         fill="none"
-        stroke="#07121f"
+        stroke="#0a182a"
         strokeWidth="5"
         strokeLinecap="round"
         strokeLinejoin="round"
@@ -103,14 +103,14 @@ function AzerSyncMark(): JSX.Element {
       <path
         d="M47 18C51 23 53 30 53 37"
         fill="none"
-        stroke="#07121f"
+        stroke="#0a182a"
         strokeWidth="4"
         strokeLinecap="round"
       />
       <path
         d="M15 46C11 41 9 34 9 27"
         fill="none"
-        stroke="#07121f"
+        stroke="#0a182a"
         strokeWidth="4"
         strokeLinecap="round"
       />
@@ -415,16 +415,16 @@ export function App(): JSX.Element {
     <main className="app-shell">
       {windowChrome}
       <div className="app-content">
-        <section className="panel masthead">
+        <section className="panel masthead masthead--minimal">
           <div className="masthead__left">
             <div className="brand-lockup">
               <span className="brand-mark" aria-hidden="true">
                 <AzerSyncMark />
               </span>
               <div>
-                <p className="brand-eyebrow">WoW Addon Fleet Sync</p>
+                <p className="brand-eyebrow">WoW Addon Sync</p>
                 <h1>AzerSync</h1>
-                <p className="brand-subtle">Keep AddOns and WTF profiles aligned across every machine.</p>
+                <p className="brand-subtle">One repo. Consistent AddOns and profiles.</p>
               </div>
             </div>
             <nav className="view-nav" aria-label="App sections">
@@ -442,7 +442,7 @@ export function App(): JSX.Element {
           </div>
           <div className="masthead__right">
             <article>
-              <h3>Sync Status</h3>
+              <h3>Status</h3>
               <p>{syncStatus}</p>
             </article>
             <article>
@@ -453,90 +453,100 @@ export function App(): JSX.Element {
               <h3>Last Success</h3>
               <p>{formatDate(state.lastSuccessAt)}</p>
             </article>
+            <article>
+              <h3>App</h3>
+              <p>v{updateState.currentVersion}</p>
+            </article>
           </div>
         </section>
 
         {activeView === 'dashboard' ? (
           <>
-            <section className="panel quick-panel">
-              <header>
-                <h2>Quick Actions</h2>
-                <p>{status}</p>
-              </header>
-              <div className="actions">
-                <button type="button" className="primary" onClick={runNow} disabled={!canSave || state.inFlight}>
-                  {state.inFlight ? 'Syncing...' : 'Sync Now'}
-                </button>
-                <button type="button" onClick={startAutoSync} disabled={!canSave || state.inFlight}>
-                  Start Auto Sync
-                </button>
-                <button type="button" className="ghost" onClick={stopAutoSync}>
-                  Stop
-                </button>
-                <button type="button" className="primary" disabled={!canSave || saving} onClick={saveConfig}>
-                  {saving ? 'Saving...' : 'Save Settings'}
-                </button>
-              </div>
-            </section>
-
-            <section className="panel updates updates--compact">
-              <header>
-                <h2>App Updates</h2>
-                <p>{updateState.message}</p>
-              </header>
-              <div className="update-summary-row">
-                <article>
-                  <h3>Current</h3>
-                  <p>{updateState.currentVersion ? `v${updateState.currentVersion}` : 'Unknown'}</p>
-                </article>
-                <article>
-                  <h3>Latest</h3>
-                  <p>{updateState.latestVersion ? `v${updateState.latestVersion}` : 'Unknown'}</p>
-                </article>
-                <article>
-                  <h3>Checked</h3>
-                  <p>{formatDate(updateState.checkedAt)}</p>
-                </article>
-              </div>
-              {updateState.downloadPercent !== null ? (
-                <div className="download-progress-wrap">
-                  <div className="download-progress" role="presentation">
-                    <span style={{ width: `${Math.max(0, Math.min(100, updateState.downloadPercent))}%` }} />
-                  </div>
-                  <p>
-                    {updateState.downloadPercent.toFixed(1)}% ({formatMegabytes(updateState.transferredBytes)} /{' '}
-                    {formatMegabytes(updateState.totalBytes)})
-                  </p>
+            <div className="dashboard-grid">
+              <section className="panel quick-panel">
+                <header>
+                  <h2>Sync Control</h2>
+                  <p>{status}</p>
+                </header>
+                <div className="status-row">
+                  <span className="status-pill">{syncStatus}</span>
+                  <span className="status-pill">{modeLabel(mode)}</span>
                 </div>
-              ) : null}
-              <div className="actions">
-                <button type="button" onClick={checkForUpdates} disabled={!updateState.canCheck}>
-                  {updateState.phase === 'checking' ? 'Checking...' : 'Check'}
-                </button>
-                <button type="button" className="primary" onClick={downloadUpdate} disabled={!updateState.canDownload}>
-                  {updateState.phase === 'downloading' ? 'Downloading...' : 'Download'}
-                </button>
-                <button type="button" className="primary" onClick={installUpdate} disabled={!updateState.canInstall}>
-                  Restart to Apply
-                </button>
-                <button type="button" onClick={openLatestRelease} disabled={!updateState.releaseUrl}>
-                  Release Page
-                </button>
-              </div>
-              {updateState.notes ? (
-                <details className="update-details">
-                  <summary>Release notes</summary>
-                  <pre className="update-notes">{updateState.notes}</pre>
-                </details>
-              ) : null}
-            </section>
+                <div className="actions actions--tight">
+                  <button type="button" className="primary" onClick={runNow} disabled={!canSave || state.inFlight}>
+                    {state.inFlight ? 'Syncing...' : 'Sync Now'}
+                  </button>
+                  <button type="button" onClick={startAutoSync} disabled={!canSave || state.inFlight}>
+                    Start Auto Sync
+                  </button>
+                  <button type="button" className="ghost" onClick={stopAutoSync}>
+                    Stop
+                  </button>
+                  <button type="button" className="primary" disabled={!canSave || saving} onClick={saveConfig}>
+                    {saving ? 'Saving...' : 'Save Settings'}
+                  </button>
+                </div>
+              </section>
 
-            <section className="panel logs">
+              <section className="panel updates updates--compact">
+                <header>
+                  <h2>Updates</h2>
+                  <p>{updateState.message}</p>
+                </header>
+                <div className="update-summary-row">
+                  <article>
+                    <h3>Current</h3>
+                    <p>{updateState.currentVersion ? `v${updateState.currentVersion}` : 'Unknown'}</p>
+                  </article>
+                  <article>
+                    <h3>Latest</h3>
+                    <p>{updateState.latestVersion ? `v${updateState.latestVersion}` : 'Unknown'}</p>
+                  </article>
+                  <article>
+                    <h3>Checked</h3>
+                    <p>{formatDate(updateState.checkedAt)}</p>
+                  </article>
+                </div>
+                {updateState.downloadPercent !== null ? (
+                  <div className="download-progress-wrap">
+                    <div className="download-progress" role="presentation">
+                      <span style={{ width: `${Math.max(0, Math.min(100, updateState.downloadPercent))}%` }} />
+                    </div>
+                    <p>
+                      {updateState.downloadPercent.toFixed(1)}% ({formatMegabytes(updateState.transferredBytes)} /{' '}
+                      {formatMegabytes(updateState.totalBytes)})
+                    </p>
+                  </div>
+                ) : null}
+                <div className="actions actions--tight">
+                  <button type="button" onClick={checkForUpdates} disabled={!updateState.canCheck}>
+                    {updateState.phase === 'checking' ? 'Checking...' : 'Check'}
+                  </button>
+                  <button type="button" className="primary" onClick={downloadUpdate} disabled={!updateState.canDownload}>
+                    {updateState.phase === 'downloading' ? 'Downloading...' : 'Download'}
+                  </button>
+                  <button type="button" className="primary" onClick={installUpdate} disabled={!updateState.canInstall}>
+                    Restart to Apply
+                  </button>
+                  <button type="button" onClick={openLatestRelease} disabled={!updateState.releaseUrl}>
+                    Release Page
+                  </button>
+                </div>
+                {updateState.notes ? (
+                  <details className="update-details">
+                    <summary>Release notes</summary>
+                    <pre className="update-notes">{updateState.notes}</pre>
+                  </details>
+                ) : null}
+              </section>
+            </div>
+
+            <section className="panel logs logs--minimal">
               <header>
-                <h2>Activity</h2>
+                <h2>Runtime</h2>
                 <p>{state.lastError ? `Error: ${state.lastError}` : 'No active errors'}</p>
               </header>
-              <div className="runtime-grid">
+              <div className="runtime-grid runtime-grid--compact">
                 <article>
                   <h3>Last Run</h3>
                   <p>{formatDate(state.lastRunAt)}</p>
@@ -547,10 +557,13 @@ export function App(): JSX.Element {
                 </article>
                 <article>
                   <h3>Process</h3>
-                  <p>{state.inFlight ? 'Sync in progress' : state.running ? 'Auto mode active' : 'Manual mode'}</p>
+                  <p>{state.inFlight ? 'Syncing now' : state.running ? 'Auto mode active' : 'Manual mode'}</p>
                 </article>
               </div>
-              <pre className="log-view">{state.logs.join('\n') || 'No logs yet'}</pre>
+              <details className="activity-details">
+                <summary>Show detailed log</summary>
+                <pre className="log-view">{state.logs.join('\n') || 'No logs yet'}</pre>
+              </details>
             </section>
           </>
         ) : null}
@@ -558,7 +571,7 @@ export function App(): JSX.Element {
         {activeView === 'sync' ? (
           <section className="panel controls">
             <header>
-              <h2>Sync Paths & Runtime</h2>
+              <h2>Sync Paths</h2>
               <p>{modeLabel(mode)}</p>
             </header>
 
@@ -670,7 +683,7 @@ export function App(): JSX.Element {
               </label>
             </div>
 
-            <div className="actions">
+            <div className="actions actions--tight">
               <button type="button" className="primary" onClick={runNow} disabled={!canSave || state.inFlight}>
                 {state.inFlight ? 'Syncing...' : 'Sync Now'}
               </button>
@@ -780,7 +793,7 @@ export function App(): JSX.Element {
               </p>
             ) : null}
 
-            <div className="actions">
+            <div className="actions actions--tight">
               <button type="button" className="primary" disabled={!canSave || saving} onClick={saveConfig}>
                 {saving ? 'Saving...' : 'Save Settings'}
               </button>
