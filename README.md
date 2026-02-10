@@ -56,7 +56,25 @@ Artifacts are written to `release/`.
 
 `bun run dist:win:installer` builds only the NSIS installer target, but on Linux it typically requires `wine`.
 
+`bun run dist:win:ci` is the CI-safe variant (`--publish never`) used by GitHub Actions.
+
 For in-place update delivery, each GitHub release must include the Windows updater metadata files (for example `latest.yml` plus the NSIS `.exe` package).
+
+## Automated Windows release (recommended)
+
+The repo includes `.github/workflows/windows-release.yml`, which builds Windows NSIS updater artifacts on GitHub-hosted Windows runners and publishes them to the tagged release (`latest.yml`, installer `.exe`, optional `.blockmap`).
+
+Tag-driven one-command release:
+
+```bash
+git tag v0.2.1 && git push origin v0.2.1
+```
+
+Manual re-run for an existing tag:
+
+```bash
+gh workflow run windows-release.yml --repo chris-alexiuk/WoWSyncApp -f tag=v0.2.1
+```
 
 Windows helper script (run on native Windows PowerShell):
 

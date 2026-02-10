@@ -23,7 +23,8 @@
     "dist": "bun run build && electron-builder",
     "dist:linux": "bun run build && electron-builder --linux AppImage tar.gz",
     "dist:win": "bun run build && electron-builder --win nsis portable zip",
-    "dist:win:installer": "bun run build && electron-builder --win nsis"
+    "dist:win:installer": "bun run build && electron-builder --win nsis",
+    "dist:win:ci": "bun run build && electron-builder --win nsis --publish never"
   },
   "dependencies": {
     "chokidar": "^4.0.3",
