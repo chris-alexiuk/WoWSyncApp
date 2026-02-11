@@ -2,6 +2,10 @@ import { useEffect, useMemo, useState } from 'react';
 import type {
   AppUpdateState,
   AppConfig,
+  PreflightAction,
+  PreflightIssue,
+  PreflightResult,
+  ProfileSyncPreset,
   SyncMode,
   SyncState,
   WindowState,
@@ -41,10 +45,34 @@ const EMPTY_UPDATE_STATE: AppUpdateState = {
   canInstall: false,
 };
 
+const EMPTY_PREFLIGHT: PreflightResult = {
+  checkedAt: null,
+  ok: true,
+  issues: [],
+};
+
 const VIEWS: Array<{ id: AppView; label: string }> = [
   { id: 'dashboard', label: 'Dashboard' },
   { id: 'sync', label: 'Sync' },
   { id: 'settings', label: 'Settings' },
+];
+
+const PROFILE_PRESETS: Array<{ id: ProfileSyncPreset; label: string; hint: string }> = [
+  {
+    id: 'addons_only',
+    label: 'AddOns Only',
+    hint: 'Fastest: sync only Interface/AddOns.',
+  },
+  {
+    id: 'account_saved_variables',
+    label: 'Account SavedVariables',
+    hint: 'Sync a SavedVariables folder (recommended for per-character addon state).',
+  },
+  {
+    id: 'full_wtf',
+    label: 'Full WTF',
+    hint: 'Sync full WTF profile tree, including settings beyond addons.',
+  },
 ];
 
 function emailsToText(emails: string[]): string {
@@ -80,6 +108,69 @@ function formatMegabytes(bytes: number | null): string {
   }
 
   return `${Math.round(bytes / 1024 / 1024)} MB`;
+}
+
+function normalizeSlashes(value: string): string {
+  return value.replace(/\\/g, '/');
+}
+
+function inferPathSeparator(value: string): string {
+  return value.includes('\\') ? '\\' : '/';
+}
+
+function deriveWoWRootFromAddonsPath(addonsPath: string): string {
+  const trimmed = addonsPath.trim();
+  if (!trimmed) {
+    return '';
+  }
+
+  const normalized = normalizeSlashes(trimmed).replace(/\/+$/, '');
+  const marker = '/interface/addons';
+  const lower = normalized.toLowerCase();
+
+  if (lower.endsWith(marker)) {
+    return normalized.slice(0, normalized.length - marker.length);
+  }
+
+  return '';
+}
+
+function suggestProfilesPath(addonsPath: string, preset: ProfileSyncPreset): string {
+  const wowRoot = deriveWoWRootFromAddonsPath(addonsPath);
+  if (!wowRoot || preset === 'addons_only') {
+    return '';
+  }
+
+  const separator = inferPathSeparator(addonsPath);
+
+  if (preset === 'full_wtf') {
+    return `${wowRoot}${separator}WTF`;
+  }
+
+  return `${wowRoot}${separator}WTF${separator}SavedVariables`;
+}
+
+function preflightActionLabel(action: PreflightAction): string {
+  switch (action) {
+    case 'openSettings':
+      return 'Open Settings';
+    case 'openSync':
+      return 'Open Sync';
+    case 'pickGitBinary':
+      return 'Select Git';
+    case 'pickSourceAddonsPath':
+      return 'Select Source AddOns';
+    case 'pickSourceProfilesPath':
+      return 'Select Source Profiles';
+    case 'pickTargetAddonsPath':
+      return 'Select Client AddOns';
+    case 'pickTargetProfilesPath':
+      return 'Select Client Profiles';
+    case 'checkAgain':
+      return 'Recheck';
+    default:
+      return 'Fix';
+  }
 }
 
 function AzerSyncMark(): JSX.Element {
@@ -124,6 +215,8 @@ export function App(): JSX.Element {
   const [state, setState] = useState<SyncState>(EMPTY_STATE);
   const [saving, setSaving] = useState(false);
   const [status, setStatus] = useState('Loading config...');
+  const [preflight, setPreflight] = useState<PreflightResult>(EMPTY_PREFLIGHT);
+  const [preflightBusy, setPreflightBusy] = useState(false);
   const [updateState, setUpdateState] = useState<AppUpdateState>(EMPTY_UPDATE_STATE);
   const [windowState, setWindowState] = useState<WindowState>(EMPTY_WINDOW_STATE);
   const [useCustomWindowChrome, setUseCustomWindowChrome] = useState(true);
@@ -135,13 +228,17 @@ export function App(): JSX.Element {
 
     void (async () => {
       try {
-        const initialConfig = await window.wowSync.loadConfig();
+        const loadedConfig = await window.wowSync.loadConfig();
+        const initialConfig = normalizedConfig(loadedConfig);
         const initialState = await window.wowSync.getState();
         const initialUpdateState = await window.wowSync.getAppUpdateState();
         setConfig(initialConfig);
         setTrustedEmailsText(emailsToText(initialConfig.trustedAuthorEmails));
         setState(initialState);
         setUpdateState(initialUpdateState);
+        setPreflightBusy(true);
+        const initialPreflight = await window.wowSync.runPreflight(initialConfig);
+        setPreflight(initialPreflight);
         setStatus('Ready');
         unsubscribeSyncState = window.wowSync.onState((next) => setState(next));
         unsubscribeUpdateState = window.wowSync.onAppUpdateState((next) => setUpdateState(next));
@@ -151,6 +248,8 @@ export function App(): JSX.Element {
         }
       } catch (error) {
         setStatus(`Failed to load config: ${asErrorMessage(error)}`);
+      } finally {
+        setPreflightBusy(false);
       }
     })();
 
@@ -186,6 +285,7 @@ export function App(): JSX.Element {
   }, []);
 
   const mode = config?.mode ?? 'source';
+  const profileSyncEnabled = config ? config.profileSyncPreset !== 'addons_only' : false;
   const trustedEmails = useMemo(() => textToEmails(trustedEmailsText), [trustedEmailsText]);
 
   const trustConfigured = useMemo(() => {
@@ -213,11 +313,13 @@ export function App(): JSX.Element {
       return false;
     }
 
-    if (mode === 'source' && config.syncProfiles && !config.sourceProfilesPath.trim()) {
+    const syncProfiles = config.profileSyncPreset !== 'addons_only';
+
+    if (mode === 'source' && syncProfiles && !config.sourceProfilesPath.trim()) {
       return false;
     }
 
-    if (mode === 'client' && config.syncProfiles && !config.targetProfilesPath.trim()) {
+    if (mode === 'client' && syncProfiles && !config.targetProfilesPath.trim()) {
       return false;
     }
 
@@ -234,15 +336,80 @@ export function App(): JSX.Element {
     setConfig((prev) => (prev ? { ...prev, ...patch } : prev));
   };
 
+  const normalizedConfig = (value: AppConfig): AppConfig => {
+    const syncProfiles = value.profileSyncPreset !== 'addons_only';
+    return {
+      ...value,
+      syncProfiles,
+    };
+  };
+
   const currentConfig = (): AppConfig => {
     if (!config) {
       throw new Error('Config is not loaded.');
     }
 
-    return {
+    return normalizedConfig({
       ...config,
       trustedAuthorEmails: trustedEmails,
-    };
+    });
+  };
+
+  const runPreflightCheck = async (targetConfig?: AppConfig): Promise<void> => {
+    try {
+      setPreflightBusy(true);
+      const resolved = targetConfig ?? currentConfig();
+      const result = await window.wowSync.runPreflight(resolved);
+      setPreflight(result);
+    } catch (error) {
+      setStatus(`Preflight check failed: ${asErrorMessage(error)}`);
+    } finally {
+      setPreflightBusy(false);
+    }
+  };
+
+  const runIssueAction = async (issue: PreflightIssue): Promise<void> => {
+    if (!issue.action) {
+      return;
+    }
+
+    let preflightTarget: AppConfig | undefined;
+
+    switch (issue.action) {
+      case 'openSettings':
+        setActiveView('settings');
+        break;
+      case 'openSync':
+        setActiveView('sync');
+        break;
+      case 'pickGitBinary': {
+        setActiveView('settings');
+        preflightTarget = (await pickGitBinary()) ?? undefined;
+        break;
+      }
+      case 'pickSourceAddonsPath':
+        setActiveView('sync');
+        preflightTarget = (await pickDir('sourceAddonsPath')) ?? undefined;
+        break;
+      case 'pickSourceProfilesPath':
+        setActiveView('sync');
+        preflightTarget = (await pickDir('sourceProfilesPath')) ?? undefined;
+        break;
+      case 'pickTargetAddonsPath':
+        setActiveView('sync');
+        preflightTarget = (await pickDir('targetAddonsPath')) ?? undefined;
+        break;
+      case 'pickTargetProfilesPath':
+        setActiveView('sync');
+        preflightTarget = (await pickDir('targetProfilesPath')) ?? undefined;
+        break;
+      case 'checkAgain':
+        break;
+      default:
+        break;
+    }
+
+    await runPreflightCheck(preflightTarget);
   };
 
   const saveConfig = async () => {
@@ -251,12 +418,13 @@ export function App(): JSX.Element {
     }
 
     setSaving(true);
-    const nextConfig = currentConfig();
+    const nextConfig = normalizedConfig(currentConfig());
 
     try {
       await window.wowSync.saveConfig(nextConfig);
       setConfig(nextConfig);
       setStatus('Settings saved');
+      await runPreflightCheck(nextConfig);
     } catch (error) {
       setStatus(`Save failed: ${asErrorMessage(error)}`);
     } finally {
@@ -269,6 +437,7 @@ export function App(): JSX.Element {
       setStatus('Running sync...');
       const result = await window.wowSync.runSyncNow(currentConfig());
       setStatus(result.message);
+      await runPreflightCheck();
     } catch (error) {
       setStatus(`Sync failed: ${asErrorMessage(error)}`);
     }
@@ -276,11 +445,12 @@ export function App(): JSX.Element {
 
   const startAutoSync = async () => {
     try {
-      const nextConfig = currentConfig();
+      const nextConfig = normalizedConfig(currentConfig());
       await window.wowSync.saveConfig(nextConfig);
       setConfig(nextConfig);
       await window.wowSync.startSync(nextConfig);
       setStatus('Auto-sync running');
+      await runPreflightCheck(nextConfig);
     } catch (error) {
       setStatus(`Failed to start auto-sync: ${asErrorMessage(error)}`);
     }
@@ -295,28 +465,74 @@ export function App(): JSX.Element {
     }
   };
 
+  const restoreLatestBackup = async () => {
+    try {
+      setStatus('Restoring latest snapshot...');
+      const result = await window.wowSync.restoreLatestBackup(currentConfig());
+      setStatus(result.message);
+      await runPreflightCheck();
+    } catch (error) {
+      setStatus(`Rollback failed: ${asErrorMessage(error)}`);
+    }
+  };
+
   const pickDir = async (
     field: 'sourceAddonsPath' | 'targetAddonsPath' | 'sourceProfilesPath' | 'targetProfilesPath',
-  ) => {
+  ): Promise<AppConfig | null> => {
     if (!config) {
-      return;
+      return null;
     }
 
     const selected = await window.wowSync.pickDirectory(config[field]);
     if (selected) {
-      patchConfig({ [field]: selected } as Partial<AppConfig>);
+      const nextConfig = {
+        ...config,
+        [field]: selected,
+      } as AppConfig;
+      setConfig(nextConfig);
+      return nextConfig;
     }
+
+    return null;
   };
 
-  const pickGitBinary = async () => {
+  const pickGitBinary = async (): Promise<AppConfig | null> => {
     if (!config) {
-      return;
+      return null;
     }
 
     const selected = await window.wowSync.pickGitBinary(config.gitBinaryPath);
     if (selected) {
-      patchConfig({ gitBinaryPath: selected });
+      const nextConfig = {
+        ...config,
+        gitBinaryPath: selected,
+      };
+      setConfig(nextConfig);
+      return nextConfig;
     }
+
+    return null;
+  };
+
+  const applyProfilePreset = (preset: ProfileSyncPreset) => {
+    if (!config) {
+      return;
+    }
+
+    const syncProfiles = preset !== 'addons_only';
+    const profileField = mode === 'source' ? 'sourceProfilesPath' : 'targetProfilesPath';
+    const currentProfilesPath = mode === 'source' ? config.sourceProfilesPath : config.targetProfilesPath;
+    const addonsPath = mode === 'source' ? config.sourceAddonsPath : config.targetAddonsPath;
+    const suggested = syncProfiles && !currentProfilesPath.trim() ? suggestProfilesPath(addonsPath, preset) : '';
+
+    const nextConfig = {
+      ...config,
+      profileSyncPreset: preset,
+      syncProfiles,
+      ...(suggested ? { [profileField]: suggested } : {}),
+    } as AppConfig;
+
+    setConfig(nextConfig);
   };
 
   const checkForUpdates = async () => {
@@ -462,6 +678,45 @@ export function App(): JSX.Element {
 
         {activeView === 'dashboard' ? (
           <>
+            <section className="panel preflight-panel">
+              <header>
+                <h2>Startup Checks</h2>
+                <p>
+                  {preflight.checkedAt
+                    ? `Last checked ${formatDate(preflight.checkedAt)}`
+                    : 'Checks run automatically at startup'}
+                </p>
+              </header>
+              {preflight.issues.length === 0 ? (
+                <p className="preflight-ok">All checks passed.</p>
+              ) : (
+                <ul className="preflight-list">
+                  {preflight.issues.map((issue) => (
+                    <li key={`${issue.code}-${issue.message}`} className={`preflight-item preflight-item--${issue.severity}`}>
+                      <div>
+                        <strong>{issue.severity === 'error' ? 'Error' : 'Warning'}</strong>
+                        <p>{issue.message}</p>
+                      </div>
+                      {issue.action ? (
+                        <button
+                          type="button"
+                          onClick={() => void runIssueAction(issue)}
+                          disabled={preflightBusy || saving || state.inFlight}
+                        >
+                          {preflightActionLabel(issue.action)}
+                        </button>
+                      ) : null}
+                    </li>
+                  ))}
+                </ul>
+              )}
+              <div className="actions actions--tight">
+                <button type="button" onClick={() => void runPreflightCheck()} disabled={preflightBusy}>
+                  {preflightBusy ? 'Checking...' : 'Run Checks Again'}
+                </button>
+              </div>
+            </section>
+
             <div className="dashboard-grid">
               <section className="panel quick-panel">
                 <header>
@@ -482,6 +737,11 @@ export function App(): JSX.Element {
                   <button type="button" className="ghost" onClick={stopAutoSync}>
                     Stop
                   </button>
+                  {mode === 'client' ? (
+                    <button type="button" className="ghost" onClick={restoreLatestBackup} disabled={state.inFlight}>
+                      Restore Previous Snapshot
+                    </button>
+                  ) : null}
                   <button type="button" className="primary" disabled={!canSave || saving} onClick={saveConfig}>
                     {saving ? 'Saving...' : 'Save Settings'}
                   </button>
@@ -588,14 +848,24 @@ export function App(): JSX.Element {
               ))}
             </div>
 
-            <label className="checkbox-line">
-              <input
-                type="checkbox"
-                checked={config.syncProfiles}
-                onChange={(event) => patchConfig({ syncProfiles: event.target.checked })}
-              />
-              Sync profile/config folder too (WTF / SavedVariables)
-            </label>
+            <div className="profile-preset-group">
+              <p className="profile-preset-label">Profile Sync Preset</p>
+              <div className="mode-toggle profile-toggle" role="radiogroup" aria-label="Profile sync preset">
+                {PROFILE_PRESETS.map((preset) => (
+                  <button
+                    key={preset.id}
+                    className={preset.id === config.profileSyncPreset ? 'active' : ''}
+                    onClick={() => applyProfilePreset(preset.id)}
+                    type="button"
+                  >
+                    {preset.label}
+                  </button>
+                ))}
+              </div>
+              <p className="profile-preset-hint">
+                {PROFILE_PRESETS.find((preset) => preset.id === config.profileSyncPreset)?.hint}
+              </p>
+            </div>
 
             {mode === 'source' ? (
               <>
@@ -612,14 +882,18 @@ export function App(): JSX.Element {
                     </button>
                   </div>
                 </label>
-                {config.syncProfiles ? (
+                {profileSyncEnabled ? (
                   <label>
-                    Source Profiles Folder
+                    Source Profile Folder
                     <div className="inline-field">
                       <input
                         value={config.sourceProfilesPath}
                         onChange={(event) => patchConfig({ sourceProfilesPath: event.target.value })}
-                        placeholder="/path/to/WTF or .../SavedVariables"
+                        placeholder={
+                          config.profileSyncPreset === 'full_wtf'
+                            ? '/path/to/WTF'
+                            : '/path/to/.../SavedVariables'
+                        }
                       />
                       <button type="button" onClick={() => pickDir('sourceProfilesPath')}>
                         Browse
@@ -643,14 +917,18 @@ export function App(): JSX.Element {
                     </button>
                   </div>
                 </label>
-                {config.syncProfiles ? (
+                {profileSyncEnabled ? (
                   <label>
-                    Client Profiles Folder
+                    Client Profile Folder
                     <div className="inline-field">
                       <input
                         value={config.targetProfilesPath}
                         onChange={(event) => patchConfig({ targetProfilesPath: event.target.value })}
-                        placeholder="/path/to/WTF or .../SavedVariables"
+                        placeholder={
+                          config.profileSyncPreset === 'full_wtf'
+                            ? '/path/to/WTF'
+                            : '/path/to/.../SavedVariables'
+                        }
                       />
                       <button type="button" onClick={() => pickDir('targetProfilesPath')}>
                         Browse
@@ -693,6 +971,11 @@ export function App(): JSX.Element {
               <button type="button" className="ghost" onClick={stopAutoSync}>
                 Stop
               </button>
+              {mode === 'client' ? (
+                <button type="button" className="ghost" onClick={restoreLatestBackup} disabled={state.inFlight}>
+                  Restore Previous Snapshot
+                </button>
+              ) : null}
               <button type="button" className="primary" disabled={!canSave || saving} onClick={saveConfig}>
                 {saving ? 'Saving...' : 'Save Settings'}
               </button>

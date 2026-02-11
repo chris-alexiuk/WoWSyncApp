@@ -90,6 +90,11 @@ function registerIpc(): void {
   });
 
   ipcMain.handle('sync:runNow', async (_event, config: AppConfig) => syncService.runNow(config));
+  ipcMain.handle('sync:preflight', async (_event, config: AppConfig) => syncService.runPreflight(config));
+  ipcMain.handle(
+    'sync:restoreLatestBackup',
+    async (_event, config: AppConfig) => syncService.restoreLatestBackup(config),
+  );
 
   ipcMain.handle('update:getState', async () => updateService.getState());
   ipcMain.handle('update:check', async () => updateService.checkForUpdates());

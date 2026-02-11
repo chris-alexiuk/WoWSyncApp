@@ -3,11 +3,14 @@ import { spawnSync } from 'node:child_process';
 import fs from 'fs-extra';
 import { app } from 'electron';
 import simpleGit, { type SimpleGit } from 'simple-git';
-import type { AppConfig } from '../shared/types';
+import type { AppConfig, PreflightIssue, PreflightResult } from '../shared/types';
 
 const ADDONS_SUBDIR = 'addons';
 const PROFILES_SUBDIR = 'profiles';
+const CLIENT_BACKUPS_SUBDIR = 'client-backups';
+const CLIENT_BACKUP_META_FILE = 'backup-meta.json';
 const META_FILE_NAME = '.wow-sync-meta.json';
+const MAX_CLIENT_BACKUPS = 3;
 const WINDOWS_GIT_CANDIDATES = [
   'C:\\Program Files\\Git\\cmd\\git.exe',
   'C:\\Program Files\\Git\\bin\\git.exe',
@@ -28,6 +31,11 @@ interface LatestCommitInfo {
   email: string;
 }
 
+interface ReachabilityCheckResult {
+  ok: boolean;
+  reason?: string;
+}
+
 export class GitSyncEngine {
   async run(config: AppConfig, log: LogFn): Promise<string> {
     this.validateConfig(config);
@@ -42,7 +50,220 @@ export class GitSyncEngine {
     return this.runClientSync(prepared, config, log);
   }
 
+  async runPreflight(config: AppConfig): Promise<PreflightResult> {
+    const issues: PreflightIssue[] = [];
+
+    const addIssue = (issue: PreflightIssue): void => {
+      issues.push(issue);
+    };
+
+    const mode = config.mode;
+    const sourceAddonsPath = config.sourceAddonsPath.trim();
+    const sourceProfilesPath = config.sourceProfilesPath.trim();
+    const targetAddonsPath = config.targetAddonsPath.trim();
+    const targetProfilesPath = config.targetProfilesPath.trim();
+    const repoUrl = config.repoUrl.trim();
+    const branch = config.branch.trim();
+
+    if (!repoUrl) {
+      addIssue({
+        code: 'missing_repo_url',
+        severity: 'error',
+        message: 'Repository URL is required.',
+        action: 'openSettings',
+      });
+    }
+
+    if (!branch) {
+      addIssue({
+        code: 'missing_branch',
+        severity: 'error',
+        message: 'Branch is required.',
+        action: 'openSettings',
+      });
+    }
+
+    if (mode === 'source') {
+      if (!sourceAddonsPath) {
+        addIssue({
+          code: 'missing_source_addons_path',
+          severity: 'error',
+          message: 'Source AddOns folder is required in source mode.',
+          action: 'pickSourceAddonsPath',
+        });
+      } else if (!(await fs.pathExists(sourceAddonsPath))) {
+        addIssue({
+          code: 'source_addons_path_not_found',
+          severity: 'error',
+          message: `Source AddOns folder does not exist: ${sourceAddonsPath}`,
+          action: 'pickSourceAddonsPath',
+        });
+      }
+    }
+
+    if (mode === 'client') {
+      if (!targetAddonsPath) {
+        addIssue({
+          code: 'missing_target_addons_path',
+          severity: 'error',
+          message: 'Client AddOns folder is required in client mode.',
+          action: 'pickTargetAddonsPath',
+        });
+      }
+
+      if (!config.requireSignedCommits && config.trustedAuthorEmails.length === 0) {
+        addIssue({
+          code: 'missing_client_trust_policy',
+          severity: 'error',
+          message: 'Client mode needs trusted author emails or signed commit enforcement.',
+          action: 'openSettings',
+        });
+      }
+    }
+
+    if (config.syncProfiles) {
+      if (mode === 'source') {
+        if (!sourceProfilesPath) {
+          addIssue({
+            code: 'missing_source_profiles_path',
+            severity: 'error',
+            message: 'Source profile folder is required when profile sync is enabled.',
+            action: 'pickSourceProfilesPath',
+          });
+        } else if (!(await fs.pathExists(sourceProfilesPath))) {
+          addIssue({
+            code: 'source_profiles_path_not_found',
+            severity: 'error',
+            message: `Source profile folder does not exist: ${sourceProfilesPath}`,
+            action: 'pickSourceProfilesPath',
+          });
+        }
+
+        if (
+          config.profileSyncPreset === 'account_saved_variables' &&
+          sourceProfilesPath &&
+          !this.isLikelySavedVariablesPath(sourceProfilesPath)
+        ) {
+          addIssue({
+            code: 'source_profiles_not_saved_variables',
+            severity: 'warning',
+            message:
+              "Account SavedVariables preset is active. Point source profile path to a SavedVariables folder (for example .../WTF/Account/<id>/SavedVariables).",
+            action: 'pickSourceProfilesPath',
+          });
+        }
+      } else {
+        if (!targetProfilesPath) {
+          addIssue({
+            code: 'missing_target_profiles_path',
+            severity: 'error',
+            message: 'Client profile folder is required when profile sync is enabled.',
+            action: 'pickTargetProfilesPath',
+          });
+        }
+
+        if (
+          config.profileSyncPreset === 'account_saved_variables' &&
+          targetProfilesPath &&
+          !this.isLikelySavedVariablesPath(targetProfilesPath)
+        ) {
+          addIssue({
+            code: 'target_profiles_not_saved_variables',
+            severity: 'warning',
+            message:
+              "Account SavedVariables preset is active. Point client profile path to a SavedVariables folder (for example .../WTF/Account/<id>/SavedVariables).",
+            action: 'pickTargetProfilesPath',
+          });
+        }
+      }
+    }
+
+    let gitBinary = '';
+    try {
+      gitBinary = await this.resolveGitBinary(config, () => {});
+    } catch (error) {
+      addIssue({
+        code: 'git_unavailable',
+        severity: 'error',
+        message: error instanceof Error ? error.message : String(error),
+        action: 'pickGitBinary',
+      });
+    }
+
+    if (repoUrl && gitBinary) {
+      const reachability = this.checkRepositoryReachability(repoUrl, config.githubToken, gitBinary);
+      if (!reachability.ok) {
+        addIssue({
+          code: 'repo_unreachable',
+          severity: 'warning',
+          message:
+            reachability.reason ??
+            'Repository could not be reached right now. Check token/network/repository access.',
+          action: 'openSettings',
+        });
+      }
+    }
+
+    return {
+      checkedAt: new Date().toISOString(),
+      ok: issues.every((issue) => issue.severity !== 'error'),
+      issues,
+    };
+  }
+
+  async restoreLatestClientBackup(config: AppConfig, log: LogFn): Promise<string> {
+    if (config.mode !== 'client') {
+      throw new Error('Rollback is available only in client mode.');
+    }
+
+    if (!config.targetAddonsPath.trim()) {
+      throw new Error('Client addons folder is required for rollback.');
+    }
+
+    const backupRoot = this.getClientBackupRootPath(config);
+    if (!(await fs.pathExists(backupRoot))) {
+      throw new Error('No rollback snapshots are available yet.');
+    }
+
+    const snapshots = await this.listBackupSnapshots(backupRoot);
+    const latestSnapshot = snapshots[0];
+
+    if (!latestSnapshot) {
+      throw new Error('No rollback snapshots are available yet.');
+    }
+
+    const snapshotPath = path.join(backupRoot, latestSnapshot);
+    const backupAddonsPath = path.join(snapshotPath, ADDONS_SUBDIR);
+    if (!(await fs.pathExists(backupAddonsPath))) {
+      throw new Error(`Rollback snapshot ${latestSnapshot} is missing addons data.`);
+    }
+
+    log(`Restoring addons from snapshot ${latestSnapshot}...`);
+    await this.mirrorDirectory(backupAddonsPath, config.targetAddonsPath.trim());
+
+    const backupProfilesPath = path.join(snapshotPath, PROFILES_SUBDIR);
+    const shouldRestoreProfiles =
+      config.syncProfiles && config.targetProfilesPath.trim() && (await fs.pathExists(backupProfilesPath));
+
+    if (shouldRestoreProfiles) {
+      log(`Restoring profiles from snapshot ${latestSnapshot}...`);
+      await this.mirrorDirectory(backupProfilesPath, config.targetProfilesPath.trim());
+    }
+
+    return shouldRestoreProfiles
+      ? `Restored addons and profiles from snapshot ${latestSnapshot}.`
+      : `Restored addons from snapshot ${latestSnapshot}.`;
+  }
+
   private validateConfig(config: AppConfig): void {
+    if (config.profileSyncPreset === 'addons_only' && config.syncProfiles) {
+      throw new Error("Profile preset is 'AddOns only' but profile sync is enabled.");
+    }
+
+    if (config.profileSyncPreset !== 'addons_only' && !config.syncProfiles) {
+      throw new Error('Profile preset requires profile sync to be enabled.');
+    }
+
     if (!config.repoUrl.trim()) {
       throw new Error('Repository URL is required.');
     }
@@ -59,12 +280,34 @@ export class GitSyncEngine {
       throw new Error('Source profiles folder is required when profile sync is enabled.');
     }
 
+    if (
+      config.mode === 'source' &&
+      config.syncProfiles &&
+      config.profileSyncPreset === 'account_saved_variables' &&
+      !this.isLikelySavedVariablesPath(config.sourceProfilesPath)
+    ) {
+      throw new Error(
+        "Account SavedVariables preset requires source profile path to point at a SavedVariables folder.",
+      );
+    }
+
     if (config.mode === 'client' && !config.targetAddonsPath.trim()) {
       throw new Error('Client addons folder is required in client mode.');
     }
 
     if (config.mode === 'client' && config.syncProfiles && !config.targetProfilesPath.trim()) {
       throw new Error('Client profiles folder is required when profile sync is enabled.');
+    }
+
+    if (
+      config.mode === 'client' &&
+      config.syncProfiles &&
+      config.profileSyncPreset === 'account_saved_variables' &&
+      !this.isLikelySavedVariablesPath(config.targetProfilesPath)
+    ) {
+      throw new Error(
+        "Account SavedVariables preset requires client profile path to point at a SavedVariables folder.",
+      );
     }
 
     if (
@@ -291,6 +534,13 @@ export class GitSyncEngine {
       throw new Error('Sync repository has no addons payload yet.');
     }
 
+    const snapshotName = await this.createClientBackup(config, latestCommit);
+    if (snapshotName) {
+      log(`Created rollback snapshot ${snapshotName}.`);
+    } else {
+      log('No existing local files to snapshot before apply.');
+    }
+
     log('Applying synced addons to local client folder...');
     await this.mirrorDirectory(repoAddonsPath, targetAddonsPath);
 
@@ -310,6 +560,131 @@ export class GitSyncEngine {
     return config.syncProfiles
       ? `Updated addons and profiles from commit ${latestCommit.hash.slice(0, 8)} by ${latestCommit.email}.`
       : `Updated addons from commit ${latestCommit.hash.slice(0, 8)} by ${latestCommit.email}.`;
+  }
+
+  private getClientBackupRootPath(config: AppConfig): string {
+    const safeBranch = this.safePathSegment(config.branch.trim() || 'default');
+    return path.join(app.getPath('userData'), CLIENT_BACKUPS_SUBDIR, safeBranch);
+  }
+
+  private safePathSegment(input: string): string {
+    return input.replace(/[^a-zA-Z0-9._-]/g, '_');
+  }
+
+  private async listBackupSnapshots(backupRoot: string): Promise<string[]> {
+    const entries = await fs.readdir(backupRoot, { withFileTypes: true });
+    return entries
+      .filter((entry) => entry.isDirectory())
+      .map((entry) => entry.name)
+      .sort((a, b) => b.localeCompare(a));
+  }
+
+  private async pruneClientBackups(backupRoot: string): Promise<void> {
+    const snapshots = await this.listBackupSnapshots(backupRoot);
+    const expired = snapshots.slice(MAX_CLIENT_BACKUPS);
+    for (const snapshotName of expired) {
+      await fs.remove(path.join(backupRoot, snapshotName));
+    }
+  }
+
+  private async createClientBackup(
+    config: AppConfig,
+    latestCommit: LatestCommitInfo,
+  ): Promise<string | null> {
+    const targetAddonsPath = config.targetAddonsPath.trim();
+    const targetProfilesPath = config.targetProfilesPath.trim();
+    const backupRoot = this.getClientBackupRootPath(config);
+    await fs.ensureDir(backupRoot);
+
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+    const snapshotName = `${timestamp}-${latestCommit.hash.slice(0, 8)}`;
+    const snapshotPath = path.join(backupRoot, snapshotName);
+    await fs.ensureDir(snapshotPath);
+
+    let hasPayload = false;
+    if (await fs.pathExists(targetAddonsPath)) {
+      await fs.copy(targetAddonsPath, path.join(snapshotPath, ADDONS_SUBDIR), {
+        overwrite: true,
+        errorOnExist: false,
+      });
+      hasPayload = true;
+    }
+
+    if (config.syncProfiles && targetProfilesPath && (await fs.pathExists(targetProfilesPath))) {
+      await fs.copy(targetProfilesPath, path.join(snapshotPath, PROFILES_SUBDIR), {
+        overwrite: true,
+        errorOnExist: false,
+      });
+      hasPayload = true;
+    }
+
+    if (!hasPayload) {
+      await fs.remove(snapshotPath);
+      return null;
+    }
+
+    const metadata = {
+      createdAt: new Date().toISOString(),
+      branch: config.branch,
+      commitHash: latestCommit.hash,
+      commitAuthor: latestCommit.email,
+      syncProfiles: config.syncProfiles,
+      profileSyncPreset: config.profileSyncPreset,
+      mode: config.mode,
+    };
+    await fs.writeJson(path.join(snapshotPath, CLIENT_BACKUP_META_FILE), metadata, { spaces: 2 });
+
+    await this.pruneClientBackups(backupRoot);
+    return snapshotName;
+  }
+
+  private isLikelySavedVariablesPath(inputPath: string): boolean {
+    const normalized = inputPath.replace(/\\/g, '/').toLowerCase();
+    return normalized.split('/').includes('savedvariables');
+  }
+
+  private firstLine(value: string): string {
+    return value
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .find(Boolean) ?? '';
+  }
+
+  private redactSecret(value: string, secret: string): string {
+    if (!secret.trim()) {
+      return value;
+    }
+
+    return value.split(secret.trim()).join('[redacted]');
+  }
+
+  private checkRepositoryReachability(
+    repoUrl: string,
+    token: string,
+    gitBinary: string,
+  ): ReachabilityCheckResult {
+    const authRepoUrl = this.buildAuthRepoUrl(repoUrl, token);
+
+    try {
+      const result = spawnSync(gitBinary, ['ls-remote', authRepoUrl, 'HEAD'], {
+        windowsHide: true,
+        timeout: 7000,
+      });
+
+      if (result.status === 0) {
+        return { ok: true };
+      }
+
+      const stderr = this.redactSecret(String(result.stderr ?? ''), token);
+      const stdout = this.redactSecret(String(result.stdout ?? ''), token);
+      const reason = this.firstLine(stderr) || this.firstLine(stdout) || 'Repository check failed.';
+      return { ok: false, reason };
+    } catch (error) {
+      return {
+        ok: false,
+        reason: error instanceof Error ? error.message : String(error),
+      };
+    }
   }
 
   private async mirrorDirectory(sourcePath: string, targetPath: string): Promise<void> {
@@ -333,6 +708,7 @@ export class GitSyncEngine {
       machineLabel: config.machineLabel,
       mode: config.mode,
       syncProfiles: config.syncProfiles,
+      profileSyncPreset: config.profileSyncPreset,
       updatedAt: new Date().toISOString(),
       branch: config.branch,
     };

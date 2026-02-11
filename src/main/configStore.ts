@@ -10,6 +10,7 @@ const DEFAULT_CONFIG: AppConfig = {
   branch: 'development',
   githubToken: '',
   gitBinaryPath: '',
+  profileSyncPreset: 'addons_only',
   syncProfiles: false,
   sourceAddonsPath: '',
   sourceProfilesPath: '',
@@ -32,9 +33,14 @@ export async function loadConfig(): Promise<AppConfig> {
   try {
     const raw = await fs.readFile(filePath, 'utf8');
     const parsed = JSON.parse(raw) as Partial<AppConfig>;
+    const migratedPreset =
+      parsed.profileSyncPreset ?? (parsed.syncProfiles ? 'full_wtf' : DEFAULT_CONFIG.profileSyncPreset);
+
     return {
       ...DEFAULT_CONFIG,
       ...parsed,
+      profileSyncPreset: migratedPreset,
+      syncProfiles: migratedPreset !== 'addons_only',
       trustedAuthorEmails: parsed.trustedAuthorEmails ?? DEFAULT_CONFIG.trustedAuthorEmails,
     };
   } catch {

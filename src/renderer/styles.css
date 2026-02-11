@@ -279,6 +279,59 @@ body {
   grid-template-columns: 1.2fr 0.8fr;
 }
 
+.preflight-panel {
+  display: grid;
+  gap: 10px;
+}
+
+.preflight-ok {
+  margin: 0;
+  color: #c9f2df;
+}
+
+.preflight-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 8px;
+}
+
+.preflight-item {
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.02);
+  padding: 9px 10px;
+  display: grid;
+  gap: 8px;
+  align-items: start;
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.preflight-item strong {
+  display: inline-block;
+  font-size: 0.8rem;
+  margin-bottom: 4px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.preflight-item p {
+  margin: 0;
+  font-size: 0.9rem;
+  color: #d8e7ff;
+}
+
+.preflight-item--error {
+  border-color: rgba(255, 130, 147, 0.44);
+  background: rgba(255, 127, 135, 0.08);
+}
+
+.preflight-item--warning {
+  border-color: rgba(255, 203, 113, 0.4);
+  background: rgba(255, 190, 95, 0.07);
+}
+
 .quick-panel,
 .updates--compact,
 .logs--minimal {
@@ -381,6 +434,29 @@ pre::-webkit-scrollbar-thumb {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
+}
+
+.profile-preset-group {
+  margin-top: 8px;
+}
+
+.profile-preset-label {
+  margin: 0;
+  font-size: 0.82rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.profile-toggle {
+  margin-top: 8px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.profile-preset-hint {
+  margin: 8px 0 0;
+  color: var(--text-muted);
+  font-size: 0.86rem;
 }
 
 .mode-toggle button {
@@ -595,6 +671,10 @@ button:disabled {
   }
 
   .inline-field {
+    grid-template-columns: 1fr;
+  }
+
+  .preflight-item {
     grid-template-columns: 1fr;
   }
 }

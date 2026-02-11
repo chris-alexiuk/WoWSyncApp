@@ -1,6 +1,6 @@
 import path from 'node:path';
 import chokidar, { type FSWatcher } from 'chokidar';
-import type { AppConfig, SyncRunResult, SyncState } from '../shared/types';
+import type { AppConfig, PreflightResult, SyncRunResult, SyncState } from '../shared/types';
 import { GitSyncEngine } from './gitSyncEngine';
 
 type Listener = (state: SyncState) => void;
@@ -104,6 +104,48 @@ export class SyncService {
       this.state.inFlight = false;
       this.emit();
     }
+  }
+
+  async restoreLatestBackup(config: AppConfig): Promise<SyncRunResult> {
+    if (this.inFlight) {
+      this.pushLog('Rollback skipped because another sync run is still active.');
+      this.emit();
+      return { ok: false, message: 'Another sync operation is in progress.' };
+    }
+
+    this.inFlight = true;
+    this.state.inFlight = true;
+    this.state.lastRunAt = nowISO();
+    this.state.lastError = null;
+    this.pushLog('Rollback run started.');
+    this.emit();
+
+    try {
+      const message = await this.engine.restoreLatestClientBackup(config, (line) => {
+        this.pushLog(line);
+        this.emit();
+      });
+
+      this.state.lastSuccessAt = nowISO();
+      this.pushLog(message);
+      this.emit();
+
+      return { ok: true, message };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.state.lastError = message;
+      this.pushLog(`Rollback failed: ${message}`);
+      this.emit();
+      return { ok: false, message };
+    } finally {
+      this.inFlight = false;
+      this.state.inFlight = false;
+      this.emit();
+    }
+  }
+
+  async runPreflight(config: AppConfig): Promise<PreflightResult> {
+    return this.engine.runPreflight(config);
   }
 
   private startSourceWatcher(config: AppConfig): void {
