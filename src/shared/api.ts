@@ -1,4 +1,5 @@
 import type {
+  PreflightResult,
   AppUpdateState,
   AppConfig,
   SyncRunResult,
@@ -13,6 +14,8 @@ export interface WoWSyncApi {
   startSync: (config: AppConfig) => Promise<SyncState>;
   stopSync: () => Promise<SyncState>;
   runSyncNow: (config: AppConfig) => Promise<SyncRunResult>;
+  runPreflight: (config: AppConfig) => Promise<PreflightResult>;
+  restoreLatestBackup: (config: AppConfig) => Promise<SyncRunResult>;
   pickDirectory: (currentPath?: string) => Promise<string>;
   pickGitBinary: (currentPath?: string) => Promise<string>;
   getAppUpdateState: () => Promise<AppUpdateState>;

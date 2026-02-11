@@ -1,6 +1,13 @@
 import { contextBridge, ipcRenderer } from 'electron';
 import type { WoWSyncApi } from '../shared/api';
-import type { AppConfig, AppUpdateState, SyncState, WindowState } from '../shared/types';
+import type {
+  AppConfig,
+  AppUpdateState,
+  PreflightResult,
+  SyncRunResult,
+  SyncState,
+  WindowState,
+} from '../shared/types';
 
 const api: WoWSyncApi = {
   loadConfig: () => ipcRenderer.invoke('config:load'),
@@ -8,7 +15,10 @@ const api: WoWSyncApi = {
   getState: () => ipcRenderer.invoke('sync:getState'),
   startSync: (config: AppConfig) => ipcRenderer.invoke('sync:start', config),
   stopSync: () => ipcRenderer.invoke('sync:stop'),
-  runSyncNow: (config: AppConfig) => ipcRenderer.invoke('sync:runNow', config),
+  runSyncNow: (config: AppConfig) => ipcRenderer.invoke('sync:runNow', config) as Promise<SyncRunResult>,
+  runPreflight: (config: AppConfig) => ipcRenderer.invoke('sync:preflight', config) as Promise<PreflightResult>,
+  restoreLatestBackup: (config: AppConfig) =>
+    ipcRenderer.invoke('sync:restoreLatestBackup', config) as Promise<SyncRunResult>,
   pickDirectory: (currentPath?: string) => ipcRenderer.invoke('dialog:pickDirectory', currentPath),
   pickGitBinary: (currentPath?: string) => ipcRenderer.invoke('dialog:pickGitBinary', currentPath),
   getAppUpdateState: () => ipcRenderer.invoke('update:getState') as Promise<AppUpdateState>,

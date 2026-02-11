@@ -1,4 +1,15 @@
 export type SyncMode = 'source' | 'client';
+export type ProfileSyncPreset = 'addons_only' | 'account_saved_variables' | 'full_wtf';
+export type PreflightSeverity = 'error' | 'warning';
+export type PreflightAction =
+  | 'openSettings'
+  | 'openSync'
+  | 'pickGitBinary'
+  | 'pickSourceAddonsPath'
+  | 'pickSourceProfilesPath'
+  | 'pickTargetAddonsPath'
+  | 'pickTargetProfilesPath'
+  | 'checkAgain';
 
 export interface AppConfig {
   mode: SyncMode;
@@ -7,6 +18,7 @@ export interface AppConfig {
   branch: string;
   githubToken: string;
   gitBinaryPath: string;
+  profileSyncPreset: ProfileSyncPreset;
   syncProfiles: boolean;
   sourceAddonsPath: string;
   sourceProfilesPath: string;
@@ -31,6 +43,19 @@ export interface SyncState {
 export interface SyncRunResult {
   ok: boolean;
   message: string;
+}
+
+export interface PreflightIssue {
+  code: string;
+  severity: PreflightSeverity;
+  message: string;
+  action?: PreflightAction;
+}
+
+export interface PreflightResult {
+  checkedAt: string | null;
+  ok: boolean;
+  issues: PreflightIssue[];
 }
 
 export type AppUpdatePhase =
