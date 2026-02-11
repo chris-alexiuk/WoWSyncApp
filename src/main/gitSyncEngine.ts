@@ -16,6 +16,13 @@ import {
   GIT_SPAWN_TIMEOUT_MS,
   GIT_REACHABILITY_TIMEOUT_MS,
 } from '../shared/constants';
+import {
+  normalizeConfiguredGitPath,
+  safePathSegment,
+  isLikelySavedVariablesPath,
+  firstLine,
+  redactSecret,
+} from './pathUtils';
 
 type LogFn = (line: string) => void;
 
@@ -141,7 +148,7 @@ export class GitSyncEngine {
         if (
           config.profileSyncPreset === 'account_saved_variables' &&
           sourceProfilesPath &&
-          !this.isLikelySavedVariablesPath(sourceProfilesPath)
+          !isLikelySavedVariablesPath(sourceProfilesPath)
         ) {
           addIssue({
             code: 'source_profiles_not_saved_variables',
@@ -164,7 +171,7 @@ export class GitSyncEngine {
         if (
           config.profileSyncPreset === 'account_saved_variables' &&
           targetProfilesPath &&
-          !this.isLikelySavedVariablesPath(targetProfilesPath)
+          !isLikelySavedVariablesPath(targetProfilesPath)
         ) {
           addIssue({
             code: 'target_profiles_not_saved_variables',
@@ -283,7 +290,7 @@ export class GitSyncEngine {
       config.mode === 'source' &&
       config.syncProfiles &&
       config.profileSyncPreset === 'account_saved_variables' &&
-      !this.isLikelySavedVariablesPath(config.sourceProfilesPath)
+      !isLikelySavedVariablesPath(config.sourceProfilesPath)
     ) {
       throw new ConfigError(
         "Account SavedVariables preset requires source profile path to point at a SavedVariables folder.",
@@ -302,7 +309,7 @@ export class GitSyncEngine {
       config.mode === 'client' &&
       config.syncProfiles &&
       config.profileSyncPreset === 'account_saved_variables' &&
-      !this.isLikelySavedVariablesPath(config.targetProfilesPath)
+      !isLikelySavedVariablesPath(config.targetProfilesPath)
     ) {
       throw new ConfigError(
         "Account SavedVariables preset requires client profile path to point at a SavedVariables folder.",
@@ -344,18 +351,6 @@ export class GitSyncEngine {
     return trimmed;
   }
 
-  private normalizeConfiguredGitPath(inputPath: string): string {
-    const trimmed = inputPath.trim();
-    if (
-      (trimmed.startsWith('"') && trimmed.endsWith('"')) ||
-      (trimmed.startsWith("'") && trimmed.endsWith("'"))
-    ) {
-      return trimmed.slice(1, -1).trim();
-    }
-
-    return trimmed;
-  }
-
   private isGitBinaryAvailable(binaryPath: string): boolean {
     try {
       const result = spawnSync(binaryPath, ['--version'], {
@@ -370,7 +365,7 @@ export class GitSyncEngine {
   }
 
   private async resolveGitBinary(config: AppConfig, log: LogFn): Promise<string> {
-    const configured = this.normalizeConfiguredGitPath(config.gitBinaryPath);
+    const configured = normalizeConfiguredGitPath(config.gitBinaryPath);
     if (configured) {
       if (await fs.pathExists(configured) && this.isGitBinaryAvailable(configured)) {
         return configured;
@@ -562,12 +557,8 @@ export class GitSyncEngine {
   }
 
   private getClientBackupRootPath(config: AppConfig): string {
-    const safeBranch = this.safePathSegment(config.branch.trim() || 'default');
+    const safeBranch = safePathSegment(config.branch.trim() || 'default');
     return path.join(app.getPath('userData'), CLIENT_BACKUPS_SUBDIR, safeBranch);
-  }
-
-  private safePathSegment(input: string): string {
-    return input.replace(/[^a-zA-Z0-9._-]/g, '_');
   }
 
   private async listBackupSnapshots(backupRoot: string): Promise<string[]> {
@@ -637,26 +628,6 @@ export class GitSyncEngine {
     return snapshotName;
   }
 
-  private isLikelySavedVariablesPath(inputPath: string): boolean {
-    const normalized = inputPath.replace(/\\/g, '/').toLowerCase();
-    return normalized.split('/').includes('savedvariables');
-  }
-
-  private firstLine(value: string): string {
-    return value
-      .split(/\r?\n/)
-      .map((line) => line.trim())
-      .find(Boolean) ?? '';
-  }
-
-  private redactSecret(value: string, secret: string): string {
-    if (!secret.trim()) {
-      return value;
-    }
-
-    return value.split(secret.trim()).join('[redacted]');
-  }
-
   private checkRepositoryReachability(
     repoUrl: string,
     token: string,
@@ -674,9 +645,9 @@ export class GitSyncEngine {
         return { ok: true };
       }
 
-      const stderr = this.redactSecret(String(result.stderr ?? ''), token);
-      const stdout = this.redactSecret(String(result.stdout ?? ''), token);
-      const reason = this.firstLine(stderr) || this.firstLine(stdout) || 'Repository check failed.';
+      const stderr = redactSecret(String(result.stderr ?? ''), token);
+      const stdout = redactSecret(String(result.stdout ?? ''), token);
+      const reason = firstLine(stderr) || firstLine(stdout) || 'Repository check failed.';
       return { ok: false, reason };
     } catch (error) {
       return {
