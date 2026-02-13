@@ -11,13 +11,11 @@ import {
 } from '../shared/constants';
 import { ConfigError, PathError } from '../shared/errors';
 import { safePathSegment } from './pathUtils';
+import type { LatestCommitInfo } from './trustValidator';
 
 type LogFn = (line: string) => void;
 
-export interface LatestCommitInfo {
-  hash: string;
-  email: string;
-}
+export type { LatestCommitInfo };
 
 /** Copy source directory to target, replacing target contents. */
 export async function mirrorDirectory(sourcePath: string, targetPath: string): Promise<void> {
