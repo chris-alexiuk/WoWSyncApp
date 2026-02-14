@@ -70,6 +70,7 @@ async function createWindow(): Promise<void> {
 }
 
 function registerIpc(): void {
+  // -- Configuration -------------------------------------------------------
   ipcMain.handle('config:load', async () => loadConfig());
 
   ipcMain.handle('config:save', async (_event, config: AppConfig) => {
@@ -77,6 +78,7 @@ function registerIpc(): void {
     return { ok: true };
   });
 
+  // -- Sync operations -----------------------------------------------------
   ipcMain.handle('sync:getState', async () => syncService.getState());
 
   ipcMain.handle('sync:start', async (_event, config: AppConfig) => {
@@ -96,16 +98,19 @@ function registerIpc(): void {
     async (_event, config: AppConfig) => syncService.restoreLatestBackup(config),
   );
 
+  // -- Auto-update ---------------------------------------------------------
   ipcMain.handle('update:getState', async () => updateService.getState());
   ipcMain.handle('update:check', async () => updateService.checkForUpdates());
   ipcMain.handle('update:download', async () => updateService.downloadUpdate());
   ipcMain.handle('update:install', async () => updateService.installUpdateAndRestart());
 
+  // -- Shell & external ----------------------------------------------------
   ipcMain.handle('shell:openExternal', async (_event, url: string) => {
     await shell.openExternal(url);
     return { ok: true };
   });
 
+  // -- Window management ---------------------------------------------------
   ipcMain.handle('window:getState', async () => currentWindowState());
   ipcMain.handle('window:usesCustomChrome', async () => useCustomWindowChrome);
 
@@ -135,6 +140,7 @@ function registerIpc(): void {
     return { ok: true };
   });
 
+  // -- File dialogs --------------------------------------------------------
   ipcMain.handle('dialog:pickDirectory', async (_event, currentPath?: string) => {
     const options: OpenDialogOptions = {
       title: 'Choose Folder',
