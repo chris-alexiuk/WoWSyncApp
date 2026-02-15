@@ -82,12 +82,12 @@ function registerIpc(): void {
   ipcMain.handle('sync:getState', async () => syncService.getState());
 
   ipcMain.handle('sync:start', async (_event, config: AppConfig) => {
-    syncService.start(config);
+    await syncService.start(config);
     return syncService.getState();
   });
 
   ipcMain.handle('sync:stop', async () => {
-    syncService.stop();
+    await syncService.stop();
     return syncService.getState();
   });
 

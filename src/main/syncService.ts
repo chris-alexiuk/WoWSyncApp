@@ -16,6 +16,10 @@ function nowISO(): string {
   return new Date().toISOString();
 }
 
+function formatLogTimestamp(): string {
+  return new Date().toLocaleTimeString('en-US', { hour12: false });
+}
+
 export class SyncService {
   private timer: NodeJS.Timeout | null = null;
   private debounceTimer: NodeJS.Timeout | null = null;
@@ -42,11 +46,11 @@ export class SyncService {
     return this.state;
   }
 
-  start(config: AppConfig): void {
+  async start(config: AppConfig): Promise<void> {
     this.activeConfig = config;
 
     this.clearTimer();
-    this.clearWatcher();
+    await this.clearWatcher();
     this.clearDebounce();
 
     this.state.running = true;
@@ -64,9 +68,9 @@ export class SyncService {
     this.startSourceWatcher(config);
   }
 
-  stop(): void {
+  async stop(): Promise<void> {
     this.clearTimer();
-    this.clearWatcher();
+    await this.clearWatcher();
     this.clearDebounce();
 
     this.activeConfig = null;
@@ -213,9 +217,9 @@ export class SyncService {
     }
   }
 
-  private clearWatcher(): void {
+  private async clearWatcher(): Promise<void> {
     if (this.watcher) {
-      void this.watcher.close();
+      await this.watcher.close();
       this.watcher = null;
     }
   }
@@ -228,7 +232,7 @@ export class SyncService {
   }
 
   private pushLog(line: string): void {
-    this.state.logs = [`[${new Date().toLocaleTimeString()}] ${line}`, ...this.state.logs].slice(0, MAX_LOG_LINES);
+    this.state.logs = [`[${formatLogTimestamp()}] ${line}`, ...this.state.logs].slice(0, MAX_LOG_LINES);
   }
 
   private emit(): void {
