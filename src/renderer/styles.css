@@ -12,8 +12,20 @@
   --accent-strong: #77a6ff;
   --accent-text: #061422;
   --danger: #ff7f87;
+  --success: #63d6bf;
+  --success-soft: rgba(99, 214, 191, 0.14);
+  --warning: #ffbe5f;
+  --warning-soft: rgba(255, 190, 95, 0.07);
+  --danger-soft: rgba(255, 127, 135, 0.08);
+  --info: #77a6ff;
+  --info-soft: rgba(119, 166, 255, 0.16);
+  --radius-sm: 8px;
   --radius: 14px;
+  --radius-md: 10px;
   --radius-lg: 16px;
+  --transition-fast: 120ms ease;
+  --font-mono: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace;
+  --font-sans: 'Space Grotesk', 'Sora', 'Segoe UI', sans-serif;
   --shadow-panel: 0 14px 34px rgba(0, 0, 0, 0.26);
 }
 
@@ -31,7 +43,7 @@ body,
 
 body {
   margin: 0;
-  font-family: 'Space Grotesk', 'Sora', 'Segoe UI', sans-serif;
+  font-family: var(--font-sans);
   color: var(--text);
   background:
     radial-gradient(900px 440px at 10% -10%, rgba(99, 214, 191, 0.14), transparent 62%),
@@ -124,7 +136,7 @@ body {
 .window-btn {
   min-width: 42px;
   height: 30px;
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   border: 1px solid rgba(255, 255, 255, 0.15);
   background: rgba(255, 255, 255, 0.07);
   color: #e8f0ff;
@@ -230,7 +242,7 @@ body {
 
 .view-nav button {
   border: 0;
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   padding: 7px 11px;
   background: transparent;
   color: #d4e3fb;
@@ -286,7 +298,7 @@ body {
 
 .preflight-ok {
   margin: 0;
-  color: #c9f2df;
+  color: var(--success);
 }
 
 .preflight-list {
@@ -298,7 +310,7 @@ body {
 }
 
 .preflight-item {
-  border-radius: 10px;
+  border-radius: var(--radius-md);
   border: 1px solid rgba(255, 255, 255, 0.12);
   background: rgba(255, 255, 255, 0.02);
   padding: 9px 10px;
@@ -323,13 +335,13 @@ body {
 }
 
 .preflight-item--error {
-  border-color: rgba(255, 130, 147, 0.44);
-  background: rgba(255, 127, 135, 0.08);
+  border-color: rgba(255, 127, 135, 0.44);
+  background: var(--danger-soft);
 }
 
 .preflight-item--warning {
-  border-color: rgba(255, 203, 113, 0.4);
-  background: rgba(255, 190, 95, 0.07);
+  border-color: rgba(255, 190, 95, 0.4);
+  background: var(--warning-soft);
 }
 
 .quick-panel,
@@ -387,7 +399,7 @@ input,
 textarea {
   width: 100%;
   border: 1px solid rgba(255, 255, 255, 0.15);
-  border-radius: 10px;
+  border-radius: var(--radius-md);
   padding: 9px 10px;
   color: var(--text);
   background: rgba(255, 255, 255, 0.03);
@@ -460,7 +472,7 @@ pre::-webkit-scrollbar-thumb {
 }
 
 .mode-toggle button {
-  border-radius: 10px;
+  border-radius: var(--radius-md);
 }
 
 .mode-toggle button.active {
@@ -496,13 +508,13 @@ pre::-webkit-scrollbar-thumb {
 
 button {
   border: 1px solid rgba(255, 255, 255, 0.16);
-  border-radius: 10px;
+  border-radius: var(--radius-md);
   background: rgba(255, 255, 255, 0.06);
   color: var(--text);
   font: inherit;
   padding: 8px 11px;
   cursor: pointer;
-  transition: background 120ms ease, border-color 120ms ease, transform 120ms ease;
+  transition: background var(--transition-fast), border-color var(--transition-fast), transform var(--transition-fast);
 }
 
 button:hover:enabled {
@@ -578,7 +590,7 @@ button:disabled {
 
 .update-details,
 .activity-details {
-  border-radius: 10px;
+  border-radius: var(--radius-md);
   border: 1px solid rgba(255, 255, 255, 0.11);
   padding: 9px 11px;
   background: rgba(255, 255, 255, 0.02);
@@ -593,11 +605,11 @@ button:disabled {
 .update-notes,
 .log-view {
   margin: 9px 0 0;
-  border-radius: 10px;
+  border-radius: var(--radius-md);
   border: 1px solid rgba(255, 255, 255, 0.11);
   background: rgba(4, 9, 17, 0.7);
   padding: 10px 11px;
-  font-family: 'Sora', 'JetBrains Mono', 'Fira Code', monospace;
+  font-family: var(--font-mono);
   font-size: 0.86rem;
   color: #c8daff;
   white-space: pre-wrap;
