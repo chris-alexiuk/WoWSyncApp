@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from 'react';
 import type {
   AppUpdateState,
   AppConfig,
-  PreflightAction,
   PreflightIssue,
   PreflightResult,
   ProfileSyncPreset,
@@ -11,6 +10,7 @@ import type {
   WindowState,
 } from '../shared/types';
 import { AzerSyncMark, TitleBar } from './components/TitleBar';
+import { PreflightPanel } from './components/PreflightPanel';
 
 type AppView = 'dashboard' | 'sync' | 'settings';
 
@@ -149,29 +149,6 @@ function suggestProfilesPath(addonsPath: string, preset: ProfileSyncPreset): str
   }
 
   return `${wowRoot}${separator}WTF${separator}SavedVariables`;
-}
-
-function preflightActionLabel(action: PreflightAction): string {
-  switch (action) {
-    case 'openSettings':
-      return 'Open Settings';
-    case 'openSync':
-      return 'Open Sync';
-    case 'pickGitBinary':
-      return 'Select Git';
-    case 'pickSourceAddonsPath':
-      return 'Select Source AddOns';
-    case 'pickSourceProfilesPath':
-      return 'Select Source Profiles';
-    case 'pickTargetAddonsPath':
-      return 'Select Client AddOns';
-    case 'pickTargetProfilesPath':
-      return 'Select Client Profiles';
-    case 'checkAgain':
-      return 'Recheck';
-    default:
-      return 'Fix';
-  }
 }
 
 export function App(): JSX.Element {
@@ -625,44 +602,14 @@ export function App(): JSX.Element {
 
         {activeView === 'dashboard' ? (
           <>
-            <section className="panel preflight-panel">
-              <header>
-                <h2>Startup Checks</h2>
-                <p>
-                  {preflight.checkedAt
-                    ? `Last checked ${formatDate(preflight.checkedAt)}`
-                    : 'Checks run automatically at startup'}
-                </p>
-              </header>
-              {preflight.issues.length === 0 ? (
-                <p className="preflight-ok">All checks passed.</p>
-              ) : (
-                <ul className="preflight-list">
-                  {preflight.issues.map((issue) => (
-                    <li key={`${issue.code}-${issue.message}`} className={`preflight-item preflight-item--${issue.severity}`}>
-                      <div>
-                        <strong>{issue.severity === 'error' ? 'Error' : 'Warning'}</strong>
-                        <p>{issue.message}</p>
-                      </div>
-                      {issue.action ? (
-                        <button
-                          type="button"
-                          onClick={() => void runIssueAction(issue)}
-                          disabled={preflightBusy || saving || state.inFlight}
-                        >
-                          {preflightActionLabel(issue.action)}
-                        </button>
-                      ) : null}
-                    </li>
-                  ))}
-                </ul>
-              )}
-              <div className="actions actions--tight">
-                <button type="button" onClick={() => void runPreflightCheck()} disabled={preflightBusy}>
-                  {preflightBusy ? 'Checking...' : 'Run Checks Again'}
-                </button>
-              </div>
-            </section>
+            <PreflightPanel
+              preflight={preflight}
+              preflightBusy={preflightBusy}
+              saving={saving}
+              inFlight={state.inFlight}
+              onRunCheck={() => void runPreflightCheck()}
+              onIssueAction={(issue) => void runIssueAction(issue)}
+            />
 
             <div className="dashboard-grid">
               <section className="panel quick-panel">
