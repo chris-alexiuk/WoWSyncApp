@@ -11,6 +11,8 @@ import type {
 } from '../shared/types';
 import { AzerSyncMark, TitleBar } from './components/TitleBar';
 import { PreflightPanel } from './components/PreflightPanel';
+import { UpdatePanel } from './components/UpdatePanel';
+import { formatDate, asErrorMessage } from './utils';
 
 type AppView = 'dashboard' | 'sync' | 'settings';
 
@@ -89,26 +91,6 @@ function textToEmails(text: string): string[] {
 
 function modeLabel(modeValue: SyncMode): string {
   return modeValue === 'source' ? 'Source (Push)' : 'Client (Pull)';
-}
-
-function asErrorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
-}
-
-function formatDate(iso: string | null): string {
-  if (!iso) {
-    return 'Never';
-  }
-
-  return new Date(iso).toLocaleString();
-}
-
-function formatMegabytes(bytes: number | null): string {
-  if (!bytes || Number.isNaN(bytes)) {
-    return '0 MB';
-  }
-
-  return `${Math.round(bytes / 1024 / 1024)} MB`;
 }
 
 function normalizeSlashes(value: string): string {
@@ -642,57 +624,13 @@ export function App(): JSX.Element {
                 </div>
               </section>
 
-              <section className="panel updates updates--compact">
-                <header>
-                  <h2>Updates</h2>
-                  <p>{updateState.message}</p>
-                </header>
-                <div className="update-summary-row">
-                  <article>
-                    <h3>Current</h3>
-                    <p>{updateState.currentVersion ? `v${updateState.currentVersion}` : 'Unknown'}</p>
-                  </article>
-                  <article>
-                    <h3>Latest</h3>
-                    <p>{updateState.latestVersion ? `v${updateState.latestVersion}` : 'Unknown'}</p>
-                  </article>
-                  <article>
-                    <h3>Checked</h3>
-                    <p>{formatDate(updateState.checkedAt)}</p>
-                  </article>
-                </div>
-                {updateState.downloadPercent !== null ? (
-                  <div className="download-progress-wrap">
-                    <div className="download-progress" role="presentation">
-                      <span style={{ width: `${Math.max(0, Math.min(100, updateState.downloadPercent))}%` }} />
-                    </div>
-                    <p>
-                      {updateState.downloadPercent.toFixed(1)}% ({formatMegabytes(updateState.transferredBytes)} /{' '}
-                      {formatMegabytes(updateState.totalBytes)})
-                    </p>
-                  </div>
-                ) : null}
-                <div className="actions actions--tight">
-                  <button type="button" onClick={checkForUpdates} disabled={!updateState.canCheck}>
-                    {updateState.phase === 'checking' ? 'Checking...' : 'Check'}
-                  </button>
-                  <button type="button" className="primary" onClick={downloadUpdate} disabled={!updateState.canDownload}>
-                    {updateState.phase === 'downloading' ? 'Downloading...' : 'Download'}
-                  </button>
-                  <button type="button" className="primary" onClick={installUpdate} disabled={!updateState.canInstall}>
-                    Restart to Apply
-                  </button>
-                  <button type="button" onClick={openLatestRelease} disabled={!updateState.releaseUrl}>
-                    Release Page
-                  </button>
-                </div>
-                {updateState.notes ? (
-                  <details className="update-details">
-                    <summary>Release notes</summary>
-                    <pre className="update-notes">{updateState.notes}</pre>
-                  </details>
-                ) : null}
-              </section>
+              <UpdatePanel
+                updateState={updateState}
+                onCheck={checkForUpdates}
+                onDownload={downloadUpdate}
+                onInstall={installUpdate}
+                onOpenReleasePage={openLatestRelease}
+              />
             </div>
 
             <section className="panel logs logs--minimal">
