@@ -5,7 +5,6 @@ import type {
   PreflightIssue,
   PreflightResult,
   ProfileSyncPreset,
-  SyncMode,
   SyncState,
   WindowState,
 } from '../shared/types';
@@ -13,7 +12,8 @@ import { AzerSyncMark, TitleBar } from './components/TitleBar';
 import { PreflightPanel } from './components/PreflightPanel';
 import { UpdatePanel } from './components/UpdatePanel';
 import { LogViewer } from './components/LogViewer';
-import { formatDate, asErrorMessage } from './utils';
+import { SyncView } from './components/SyncView';
+import { formatDate, asErrorMessage, modeLabel, suggestProfilesPath } from './utils';
 
 type AppView = 'dashboard' | 'sync' | 'settings';
 
@@ -61,24 +61,6 @@ const VIEWS: Array<{ id: AppView; label: string }> = [
   { id: 'settings', label: 'Settings' },
 ];
 
-const PROFILE_PRESETS: Array<{ id: ProfileSyncPreset; label: string; hint: string }> = [
-  {
-    id: 'addons_only',
-    label: 'AddOns Only',
-    hint: 'Fastest: sync only Interface/AddOns.',
-  },
-  {
-    id: 'account_saved_variables',
-    label: 'Account SavedVariables',
-    hint: 'Sync a SavedVariables folder (recommended for per-character addon state).',
-  },
-  {
-    id: 'full_wtf',
-    label: 'Full WTF',
-    hint: 'Sync full WTF profile tree, including settings beyond addons.',
-  },
-];
-
 function emailsToText(emails: string[]): string {
   return emails.join(', ');
 }
@@ -88,50 +70,6 @@ function textToEmails(text: string): string[] {
     .split(',')
     .map((entry) => entry.trim())
     .filter(Boolean);
-}
-
-function modeLabel(modeValue: SyncMode): string {
-  return modeValue === 'source' ? 'Source (Push)' : 'Client (Pull)';
-}
-
-function normalizeSlashes(value: string): string {
-  return value.replace(/\\/g, '/');
-}
-
-function inferPathSeparator(value: string): string {
-  return value.includes('\\') ? '\\' : '/';
-}
-
-function deriveWoWRootFromAddonsPath(addonsPath: string): string {
-  const trimmed = addonsPath.trim();
-  if (!trimmed) {
-    return '';
-  }
-
-  const normalized = normalizeSlashes(trimmed).replace(/\/+$/, '');
-  const marker = '/interface/addons';
-  const lower = normalized.toLowerCase();
-
-  if (lower.endsWith(marker)) {
-    return normalized.slice(0, normalized.length - marker.length);
-  }
-
-  return '';
-}
-
-function suggestProfilesPath(addonsPath: string, preset: ProfileSyncPreset): string {
-  const wowRoot = deriveWoWRootFromAddonsPath(addonsPath);
-  if (!wowRoot || preset === 'addons_only') {
-    return '';
-  }
-
-  const separator = inferPathSeparator(addonsPath);
-
-  if (preset === 'full_wtf') {
-    return `${wowRoot}${separator}WTF`;
-  }
-
-  return `${wowRoot}${separator}WTF${separator}SavedVariables`;
 }
 
 export function App(): JSX.Element {
@@ -639,158 +577,22 @@ export function App(): JSX.Element {
         ) : null}
 
         {activeView === 'sync' ? (
-          <section className="panel controls">
-            <header>
-              <h2>Sync Paths</h2>
-              <p>{modeLabel(mode)}</p>
-            </header>
-
-            <div className="mode-toggle" role="radiogroup" aria-label="Sync mode">
-              {(['source', 'client'] as SyncMode[]).map((option) => (
-                <button
-                  key={option}
-                  className={option === mode ? 'active' : ''}
-                  onClick={() => patchConfig({ mode: option })}
-                  type="button"
-                >
-                  {modeLabel(option)}
-                </button>
-              ))}
-            </div>
-
-            <div className="profile-preset-group">
-              <p className="profile-preset-label">Profile Sync Preset</p>
-              <div className="mode-toggle profile-toggle" role="radiogroup" aria-label="Profile sync preset">
-                {PROFILE_PRESETS.map((preset) => (
-                  <button
-                    key={preset.id}
-                    className={preset.id === config.profileSyncPreset ? 'active' : ''}
-                    onClick={() => applyProfilePreset(preset.id)}
-                    type="button"
-                  >
-                    {preset.label}
-                  </button>
-                ))}
-              </div>
-              <p className="profile-preset-hint">
-                {PROFILE_PRESETS.find((preset) => preset.id === config.profileSyncPreset)?.hint}
-              </p>
-            </div>
-
-            {mode === 'source' ? (
-              <>
-                <label>
-                  Source AddOns Folder
-                  <div className="inline-field">
-                    <input
-                      value={config.sourceAddonsPath}
-                      onChange={(event) => patchConfig({ sourceAddonsPath: event.target.value })}
-                      placeholder="/path/to/Interface/AddOns"
-                    />
-                    <button type="button" onClick={() => pickDir('sourceAddonsPath')}>
-                      Browse
-                    </button>
-                  </div>
-                </label>
-                {profileSyncEnabled ? (
-                  <label>
-                    Source Profile Folder
-                    <div className="inline-field">
-                      <input
-                        value={config.sourceProfilesPath}
-                        onChange={(event) => patchConfig({ sourceProfilesPath: event.target.value })}
-                        placeholder={
-                          config.profileSyncPreset === 'full_wtf'
-                            ? '/path/to/WTF'
-                            : '/path/to/.../SavedVariables'
-                        }
-                      />
-                      <button type="button" onClick={() => pickDir('sourceProfilesPath')}>
-                        Browse
-                      </button>
-                    </div>
-                  </label>
-                ) : null}
-              </>
-            ) : (
-              <>
-                <label>
-                  Client AddOns Folder
-                  <div className="inline-field">
-                    <input
-                      value={config.targetAddonsPath}
-                      onChange={(event) => patchConfig({ targetAddonsPath: event.target.value })}
-                      placeholder="/path/to/Interface/AddOns"
-                    />
-                    <button type="button" onClick={() => pickDir('targetAddonsPath')}>
-                      Browse
-                    </button>
-                  </div>
-                </label>
-                {profileSyncEnabled ? (
-                  <label>
-                    Client Profile Folder
-                    <div className="inline-field">
-                      <input
-                        value={config.targetProfilesPath}
-                        onChange={(event) => patchConfig({ targetProfilesPath: event.target.value })}
-                        placeholder={
-                          config.profileSyncPreset === 'full_wtf'
-                            ? '/path/to/WTF'
-                            : '/path/to/.../SavedVariables'
-                        }
-                      />
-                      <button type="button" onClick={() => pickDir('targetProfilesPath')}>
-                        Browse
-                      </button>
-                    </div>
-                  </label>
-                ) : null}
-              </>
-            )}
-
-            <div className="grid two-up">
-              <label>
-                Sync Interval (seconds)
-                <input
-                  type="number"
-                  min={10}
-                  value={config.syncIntervalSeconds}
-                  onChange={(event) =>
-                    patchConfig({ syncIntervalSeconds: Math.max(10, Number(event.target.value) || 10) })
-                  }
-                />
-              </label>
-              <label>
-                Machine Label
-                <input
-                  value={config.machineLabel}
-                  onChange={(event) => patchConfig({ machineLabel: event.target.value })}
-                  placeholder="Raid-PC-Source"
-                />
-              </label>
-            </div>
-
-            <div className="actions actions--tight">
-              <button type="button" className="primary" onClick={runNow} disabled={!canSave || state.inFlight}>
-                {state.inFlight ? 'Syncing...' : 'Sync Now'}
-              </button>
-              <button type="button" onClick={startAutoSync} disabled={!canSave || state.inFlight}>
-                Start Auto Sync
-              </button>
-              <button type="button" className="ghost" onClick={stopAutoSync}>
-                Stop
-              </button>
-              {mode === 'client' ? (
-                <button type="button" className="ghost" onClick={restoreLatestBackup} disabled={state.inFlight}>
-                  Restore Previous Snapshot
-                </button>
-              ) : null}
-              <button type="button" className="primary" disabled={!canSave || saving} onClick={saveConfig}>
-                {saving ? 'Saving...' : 'Save Settings'}
-              </button>
-            </div>
-          </section>
+          <SyncView
+            config={config}
+            state={state}
+            canSave={canSave}
+            saving={saving}
+            mode={mode}
+            profileSyncEnabled={profileSyncEnabled}
+            onPatchConfig={patchConfig}
+            onApplyProfilePreset={applyProfilePreset}
+            onPickDir={pickDir}
+            onRunNow={runNow}
+            onStartAutoSync={startAutoSync}
+            onStopAutoSync={stopAutoSync}
+            onRestoreBackup={restoreLatestBackup}
+            onSaveConfig={saveConfig}
+          />
         ) : null}
 
         {activeView === 'settings' ? (
