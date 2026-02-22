@@ -13,6 +13,7 @@ import { PreflightPanel } from './components/PreflightPanel';
 import { UpdatePanel } from './components/UpdatePanel';
 import { LogViewer } from './components/LogViewer';
 import { SyncView } from './components/SyncView';
+import { SettingsView } from './components/SettingsView';
 import { formatDate, asErrorMessage, modeLabel, suggestProfilesPath } from './utils';
 
 type AppView = 'dashboard' | 'sync' | 'settings';
@@ -596,104 +597,18 @@ export function App(): JSX.Element {
         ) : null}
 
         {activeView === 'settings' ? (
-          <section className="panel controls">
-            <header>
-              <h2>Repository & Trust</h2>
-              <p>{status}</p>
-            </header>
-
-            <div className="grid two-up">
-              <label>
-                Branch
-                <input
-                  value={config.branch}
-                  onChange={(event) => patchConfig({ branch: event.target.value })}
-                  placeholder="development"
-                />
-              </label>
-              <label>
-                Git Binary Path (optional)
-                <div className="inline-field">
-                  <input
-                    value={config.gitBinaryPath}
-                    onChange={(event) => patchConfig({ gitBinaryPath: event.target.value })}
-                    placeholder="C:\\Program Files\\Git\\cmd\\git.exe or /usr/bin/git"
-                  />
-                  <button type="button" onClick={pickGitBinary}>
-                    Browse
-                  </button>
-                </div>
-              </label>
-            </div>
-
-            <label>
-              GitHub Repository URL
-              <input
-                value={config.repoUrl}
-                onChange={(event) => patchConfig({ repoUrl: event.target.value })}
-                placeholder="https://github.com/your-org/wow-sync-data.git"
-              />
-            </label>
-
-            <label>
-              GitHub Token (PAT)
-              <input
-                type="password"
-                value={config.githubToken}
-                onChange={(event) => patchConfig({ githubToken: event.target.value })}
-                placeholder="ghp_..."
-              />
-            </label>
-
-            <div className="grid two-up">
-              <label>
-                Git Author Name
-                <input
-                  value={config.authorName}
-                  onChange={(event) => patchConfig({ authorName: event.target.value })}
-                  placeholder="AzerSync Bot"
-                />
-              </label>
-              <label>
-                Git Author Email
-                <input
-                  value={config.authorEmail}
-                  onChange={(event) => patchConfig({ authorEmail: event.target.value })}
-                  placeholder="azersync-bot@example.local"
-                />
-              </label>
-            </div>
-
-            <label className="checkbox-line">
-              <input
-                type="checkbox"
-                checked={config.requireSignedCommits}
-                onChange={(event) => patchConfig({ requireSignedCommits: event.target.checked })}
-              />
-              Require signed commits on client ingest
-            </label>
-
-            <label>
-              Trusted Author Emails (comma separated)
-              <textarea
-                value={trustedEmailsText}
-                onChange={(event) => setTrustedEmailsText(event.target.value)}
-                placeholder="you@example.com, alt@example.com"
-              />
-            </label>
-
-            {!trustConfigured ? (
-              <p className="inline-warning">
-                Configure trusted emails or enable signed-commit enforcement for client mode.
-              </p>
-            ) : null}
-
-            <div className="actions actions--tight">
-              <button type="button" className="primary" disabled={!canSave || saving} onClick={saveConfig}>
-                {saving ? 'Saving...' : 'Save Settings'}
-              </button>
-            </div>
-          </section>
+          <SettingsView
+            config={config}
+            status={status}
+            trustedEmailsText={trustedEmailsText}
+            trustConfigured={trustConfigured}
+            canSave={canSave}
+            saving={saving}
+            onPatchConfig={patchConfig}
+            onSetTrustedEmailsText={setTrustedEmailsText}
+            onPickGitBinary={pickGitBinary}
+            onSaveConfig={saveConfig}
+          />
         ) : null}
       </div>
     </main>
