@@ -9,12 +9,10 @@ import type {
   WindowState,
 } from '../shared/types';
 import { AzerSyncMark, TitleBar } from './components/TitleBar';
-import { PreflightPanel } from './components/PreflightPanel';
-import { UpdatePanel } from './components/UpdatePanel';
-import { LogViewer } from './components/LogViewer';
+import { DashboardView } from './components/DashboardView';
 import { SyncView } from './components/SyncView';
 import { SettingsView } from './components/SettingsView';
-import { formatDate, asErrorMessage, modeLabel, suggestProfilesPath } from './utils';
+import { formatDate, asErrorMessage, modeLabel, suggestProfilesPath, emailsToText, textToEmails } from './utils';
 
 type AppView = 'dashboard' | 'sync' | 'settings';
 
@@ -61,17 +59,6 @@ const VIEWS: Array<{ id: AppView; label: string }> = [
   { id: 'sync', label: 'Sync' },
   { id: 'settings', label: 'Settings' },
 ];
-
-function emailsToText(emails: string[]): string {
-  return emails.join(', ');
-}
-
-function textToEmails(text: string): string[] {
-  return text
-    .split(',')
-    .map((entry) => entry.trim())
-    .filter(Boolean);
-}
 
 export function App(): JSX.Element {
   const [config, setConfig] = useState<AppConfig | null>(null);
@@ -193,8 +180,6 @@ export function App(): JSX.Element {
 
     return true;
   }, [config, mode, trustConfigured]);
-
-  const syncStatus = state.inFlight ? 'Syncing' : state.running ? 'Auto Sync On' : 'Idle';
 
   const patchConfig = (patch: Partial<AppConfig>) => {
     setConfig((prev) => (prev ? { ...prev, ...patch } : prev));
@@ -505,7 +490,7 @@ export function App(): JSX.Element {
           <div className="masthead__right">
             <article>
               <h3>Status</h3>
-              <p>{syncStatus}</p>
+              <p>{state.inFlight ? 'Syncing' : state.running ? 'Auto Sync On' : 'Idle'}</p>
             </article>
             <article>
               <h3>Mode</h3>
@@ -523,58 +508,28 @@ export function App(): JSX.Element {
         </section>
 
         {activeView === 'dashboard' ? (
-          <>
-            <PreflightPanel
-              preflight={preflight}
-              preflightBusy={preflightBusy}
-              saving={saving}
-              inFlight={state.inFlight}
-              onRunCheck={() => void runPreflightCheck()}
-              onIssueAction={(issue) => void runIssueAction(issue)}
-            />
-
-            <div className="dashboard-grid">
-              <section className="panel quick-panel">
-                <header>
-                  <h2>Sync Control</h2>
-                  <p>{status}</p>
-                </header>
-                <div className="status-row">
-                  <span className="status-pill">{syncStatus}</span>
-                  <span className="status-pill">{modeLabel(mode)}</span>
-                </div>
-                <div className="actions actions--tight">
-                  <button type="button" className="primary" onClick={runNow} disabled={!canSave || state.inFlight}>
-                    {state.inFlight ? 'Syncing...' : 'Sync Now'}
-                  </button>
-                  <button type="button" onClick={startAutoSync} disabled={!canSave || state.inFlight}>
-                    Start Auto Sync
-                  </button>
-                  <button type="button" className="ghost" onClick={stopAutoSync}>
-                    Stop
-                  </button>
-                  {mode === 'client' ? (
-                    <button type="button" className="ghost" onClick={restoreLatestBackup} disabled={state.inFlight}>
-                      Restore Previous Snapshot
-                    </button>
-                  ) : null}
-                  <button type="button" className="primary" disabled={!canSave || saving} onClick={saveConfig}>
-                    {saving ? 'Saving...' : 'Save Settings'}
-                  </button>
-                </div>
-              </section>
-
-              <UpdatePanel
-                updateState={updateState}
-                onCheck={checkForUpdates}
-                onDownload={downloadUpdate}
-                onInstall={installUpdate}
-                onOpenReleasePage={openLatestRelease}
-              />
-            </div>
-
-            <LogViewer state={state} />
-          </>
+          <DashboardView
+            config={config}
+            state={state}
+            preflight={preflight}
+            preflightBusy={preflightBusy}
+            saving={saving}
+            updateState={updateState}
+            status={status}
+            canSave={canSave}
+            mode={mode}
+            onRunPreflightCheck={() => void runPreflightCheck()}
+            onIssueAction={(issue) => void runIssueAction(issue)}
+            onRunNow={runNow}
+            onStartAutoSync={startAutoSync}
+            onStopAutoSync={stopAutoSync}
+            onRestoreBackup={restoreLatestBackup}
+            onSaveConfig={saveConfig}
+            onCheckForUpdates={checkForUpdates}
+            onDownloadUpdate={downloadUpdate}
+            onInstallUpdate={installUpdate}
+            onOpenReleasePage={openLatestRelease}
+          />
         ) : null}
 
         {activeView === 'sync' ? (
