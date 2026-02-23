@@ -47,6 +47,17 @@ export function deriveWoWRootFromAddonsPath(addonsPath: string): string {
   return '';
 }
 
+export function emailsToText(emails: string[]): string {
+  return emails.join(', ');
+}
+
+export function textToEmails(text: string): string[] {
+  return text
+    .split(',')
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+}
+
 export function suggestProfilesPath(addonsPath: string, preset: import('../shared/types').ProfileSyncPreset): string {
   const wowRoot = deriveWoWRootFromAddonsPath(addonsPath);
   if (!wowRoot || preset === 'addons_only') {
