@@ -1,10 +1,9 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import type {
   AppUpdateState,
   AppConfig,
   PreflightIssue,
   PreflightResult,
-  ProfileSyncPreset,
   SyncState,
   WindowState,
 } from '../shared/types';
@@ -12,7 +11,8 @@ import { AzerSyncMark, TitleBar } from './components/TitleBar';
 import { DashboardView } from './components/DashboardView';
 import { SyncView } from './components/SyncView';
 import { SettingsView } from './components/SettingsView';
-import { formatDate, asErrorMessage, modeLabel, suggestProfilesPath, emailsToText, textToEmails } from './utils';
+import { useConfig } from './hooks/useConfig';
+import { formatDate, asErrorMessage, modeLabel, emailsToText } from './utils';
 
 type AppView = 'dashboard' | 'sync' | 'settings';
 
@@ -61,10 +61,13 @@ const VIEWS: Array<{ id: AppView; label: string }> = [
 ];
 
 export function App(): JSX.Element {
-  const [config, setConfig] = useState<AppConfig | null>(null);
-  const [trustedEmailsText, setTrustedEmailsText] = useState('');
+  const {
+    config, trustedEmailsText, mode, profileSyncEnabled, canSave, saving, trustConfigured,
+    setTrustedEmailsText, patchConfig, setConfig, saveConfig: saveConfigHook,
+    currentConfig, normalizedConfig, applyProfilePreset, pickDir, pickGitBinary,
+  } = useConfig();
+
   const [state, setState] = useState<SyncState>(EMPTY_STATE);
-  const [saving, setSaving] = useState(false);
   const [status, setStatus] = useState('Loading config...');
   const [preflight, setPreflight] = useState<PreflightResult>(EMPTY_PREFLIGHT);
   const [preflightBusy, setPreflightBusy] = useState(false);
@@ -135,75 +138,6 @@ export function App(): JSX.Element {
     };
   }, []);
 
-  const mode = config?.mode ?? 'source';
-  const profileSyncEnabled = config ? config.profileSyncPreset !== 'addons_only' : false;
-  const trustedEmails = useMemo(() => textToEmails(trustedEmailsText), [trustedEmailsText]);
-
-  const trustConfigured = useMemo(() => {
-    if (!config || config.mode !== 'client') {
-      return true;
-    }
-
-    return config.requireSignedCommits || trustedEmails.length > 0;
-  }, [config, trustedEmails]);
-
-  const canSave = useMemo(() => {
-    if (!config) {
-      return false;
-    }
-
-    if (!config.repoUrl.trim() || !config.branch.trim()) {
-      return false;
-    }
-
-    if (mode === 'source' && !config.sourceAddonsPath.trim()) {
-      return false;
-    }
-
-    if (mode === 'client' && !config.targetAddonsPath.trim()) {
-      return false;
-    }
-
-    const syncProfiles = config.profileSyncPreset !== 'addons_only';
-
-    if (mode === 'source' && syncProfiles && !config.sourceProfilesPath.trim()) {
-      return false;
-    }
-
-    if (mode === 'client' && syncProfiles && !config.targetProfilesPath.trim()) {
-      return false;
-    }
-
-    if (!trustConfigured) {
-      return false;
-    }
-
-    return true;
-  }, [config, mode, trustConfigured]);
-
-  const patchConfig = (patch: Partial<AppConfig>) => {
-    setConfig((prev) => (prev ? { ...prev, ...patch } : prev));
-  };
-
-  const normalizedConfig = (value: AppConfig): AppConfig => {
-    const syncProfiles = value.profileSyncPreset !== 'addons_only';
-    return {
-      ...value,
-      syncProfiles,
-    };
-  };
-
-  const currentConfig = (): AppConfig => {
-    if (!config) {
-      throw new Error('Config is not loaded.');
-    }
-
-    return normalizedConfig({
-      ...config,
-      trustedAuthorEmails: trustedEmails,
-    });
-  };
-
   const runPreflightCheck = async (targetConfig?: AppConfig): Promise<void> => {
     try {
       setPreflightBusy(true);
@@ -262,22 +196,12 @@ export function App(): JSX.Element {
   };
 
   const saveConfig = async () => {
-    if (!config) {
-      return;
-    }
-
-    setSaving(true);
-    const nextConfig = normalizedConfig(currentConfig());
-
-    try {
-      await window.wowSync.saveConfig(nextConfig);
-      setConfig(nextConfig);
+    const error = await saveConfigHook();
+    if (error) {
+      setStatus(error);
+    } else {
       setStatus('Settings saved');
-      await runPreflightCheck(nextConfig);
-    } catch (error) {
-      setStatus(`Save failed: ${asErrorMessage(error)}`);
-    } finally {
-      setSaving(false);
+      await runPreflightCheck();
     }
   };
 
@@ -323,65 +247,6 @@ export function App(): JSX.Element {
     } catch (error) {
       setStatus(`Rollback failed: ${asErrorMessage(error)}`);
     }
-  };
-
-  const pickDir = async (
-    field: 'sourceAddonsPath' | 'targetAddonsPath' | 'sourceProfilesPath' | 'targetProfilesPath',
-  ): Promise<AppConfig | null> => {
-    if (!config) {
-      return null;
-    }
-
-    const selected = await window.wowSync.pickDirectory(config[field]);
-    if (selected) {
-      const nextConfig = {
-        ...config,
-        [field]: selected,
-      } as AppConfig;
-      setConfig(nextConfig);
-      return nextConfig;
-    }
-
-    return null;
-  };
-
-  const pickGitBinary = async (): Promise<AppConfig | null> => {
-    if (!config) {
-      return null;
-    }
-
-    const selected = await window.wowSync.pickGitBinary(config.gitBinaryPath);
-    if (selected) {
-      const nextConfig = {
-        ...config,
-        gitBinaryPath: selected,
-      };
-      setConfig(nextConfig);
-      return nextConfig;
-    }
-
-    return null;
-  };
-
-  const applyProfilePreset = (preset: ProfileSyncPreset) => {
-    if (!config) {
-      return;
-    }
-
-    const syncProfiles = preset !== 'addons_only';
-    const profileField = mode === 'source' ? 'sourceProfilesPath' : 'targetProfilesPath';
-    const currentProfilesPath = mode === 'source' ? config.sourceProfilesPath : config.targetProfilesPath;
-    const addonsPath = mode === 'source' ? config.sourceAddonsPath : config.targetAddonsPath;
-    const suggested = syncProfiles && !currentProfilesPath.trim() ? suggestProfilesPath(addonsPath, preset) : '';
-
-    const nextConfig = {
-      ...config,
-      profileSyncPreset: preset,
-      syncProfiles,
-      ...(suggested ? { [profileField]: suggested } : {}),
-    } as AppConfig;
-
-    setConfig(nextConfig);
   };
 
   const checkForUpdates = async () => {
