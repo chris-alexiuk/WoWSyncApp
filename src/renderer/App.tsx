@@ -4,7 +4,6 @@ import type {
   AppConfig,
   PreflightIssue,
   PreflightResult,
-  SyncState,
   WindowState,
 } from '../shared/types';
 import { AzerSyncMark, TitleBar } from './components/TitleBar';
@@ -12,18 +11,10 @@ import { DashboardView } from './components/DashboardView';
 import { SyncView } from './components/SyncView';
 import { SettingsView } from './components/SettingsView';
 import { useConfig } from './hooks/useConfig';
+import { useSyncState } from './hooks/useSyncState';
 import { formatDate, asErrorMessage, modeLabel, emailsToText } from './utils';
 
 type AppView = 'dashboard' | 'sync' | 'settings';
-
-const EMPTY_STATE: SyncState = {
-  running: false,
-  inFlight: false,
-  lastRunAt: null,
-  lastSuccessAt: null,
-  lastError: null,
-  logs: [],
-};
 
 const EMPTY_WINDOW_STATE: WindowState = {
   isMaximized: false,
@@ -67,7 +58,7 @@ export function App(): JSX.Element {
     currentConfig, normalizedConfig, applyProfilePreset, pickDir, pickGitBinary,
   } = useConfig();
 
-  const [state, setState] = useState<SyncState>(EMPTY_STATE);
+  const state = useSyncState();
   const [status, setStatus] = useState('Loading config...');
   const [preflight, setPreflight] = useState<PreflightResult>(EMPTY_PREFLIGHT);
   const [preflightBusy, setPreflightBusy] = useState(false);
@@ -77,24 +68,20 @@ export function App(): JSX.Element {
   const [activeView, setActiveView] = useState<AppView>('dashboard');
 
   useEffect(() => {
-    let unsubscribeSyncState = () => {};
     let unsubscribeUpdateState = () => {};
 
     void (async () => {
       try {
         const loadedConfig = await window.wowSync.loadConfig();
         const initialConfig = normalizedConfig(loadedConfig);
-        const initialState = await window.wowSync.getState();
         const initialUpdateState = await window.wowSync.getAppUpdateState();
         setConfig(initialConfig);
         setTrustedEmailsText(emailsToText(initialConfig.trustedAuthorEmails));
-        setState(initialState);
         setUpdateState(initialUpdateState);
         setPreflightBusy(true);
         const initialPreflight = await window.wowSync.runPreflight(initialConfig);
         setPreflight(initialPreflight);
         setStatus('Ready');
-        unsubscribeSyncState = window.wowSync.onState((next) => setState(next));
         unsubscribeUpdateState = window.wowSync.onAppUpdateState((next) => setUpdateState(next));
 
         if (initialUpdateState.canCheck) {
@@ -108,7 +95,6 @@ export function App(): JSX.Element {
     })();
 
     return () => {
-      unsubscribeSyncState();
       unsubscribeUpdateState();
     };
   }, []);
