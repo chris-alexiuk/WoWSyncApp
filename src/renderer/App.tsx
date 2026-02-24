@@ -192,6 +192,11 @@ export function App(): JSX.Element {
   };
 
   const runNow = async () => {
+    if (mode === 'source') {
+      const confirmed = window.confirm('Push local addons to the sync repository?');
+      if (!confirmed) return;
+    }
+
     try {
       setStatus('Running sync...');
       const result = await window.wowSync.runSyncNow(currentConfig());
@@ -225,6 +230,11 @@ export function App(): JSX.Element {
   };
 
   const restoreLatestBackup = async () => {
+    const confirmed = window.confirm(
+      'Restore the most recent backup snapshot? This will overwrite your current addons folder.',
+    );
+    if (!confirmed) return;
+
     try {
       setStatus('Restoring latest snapshot...');
       const result = await window.wowSync.restoreLatestBackup(currentConfig());
