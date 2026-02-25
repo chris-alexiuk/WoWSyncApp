@@ -32,7 +32,13 @@ export function UpdatePanel({ updateState, onCheck, onDownload, onInstall, onOpe
       </div>
       {updateState.downloadPercent !== null ? (
         <div className="download-progress-wrap">
-          <div className="download-progress" role="presentation">
+          <div
+            className="download-progress"
+            role="progressbar"
+            aria-valuenow={Math.round(updateState.downloadPercent)}
+            aria-valuemin={0}
+            aria-valuemax={100}
+          >
             <span style={{ width: `${Math.max(0, Math.min(100, updateState.downloadPercent))}%` }} />
           </div>
           <p>

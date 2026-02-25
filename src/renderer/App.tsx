@@ -341,6 +341,7 @@ export function App(): JSX.Element {
                   key={view.id}
                   type="button"
                   className={activeView === view.id ? 'active' : ''}
+                  aria-current={activeView === view.id ? 'page' : undefined}
                   onClick={() => setActiveView(view.id)}
                 >
                   {view.label}
