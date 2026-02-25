@@ -154,6 +154,17 @@ body {
   color: #210305;
 }
 
+@keyframes panel-enter {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
 .panel {
   border: 1px solid var(--border);
   background: var(--surface);
@@ -161,6 +172,7 @@ body {
   box-shadow: var(--shadow-panel);
   backdrop-filter: blur(4px);
   padding: 16px;
+  animation: panel-enter 200ms ease-out;
 }
 
 .loading-panel {
@@ -357,6 +369,11 @@ body {
   flex-wrap: wrap;
 }
 
+@keyframes sync-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}
+
 .status-pill {
   border-radius: 999px;
   border: 1px solid var(--border-strong);
@@ -364,6 +381,10 @@ body {
   color: #cde0ff;
   padding: 5px 10px;
   font-size: 0.84rem;
+}
+
+.status-pill--active {
+  animation: sync-pulse 1.5s ease-in-out infinite;
 }
 
 .panel header {
@@ -514,7 +535,7 @@ button {
   font: inherit;
   padding: 8px 11px;
   cursor: pointer;
-  transition: background var(--transition-fast), border-color var(--transition-fast), transform var(--transition-fast);
+  transition: background var(--transition-fast), border-color var(--transition-fast), transform var(--transition-fast), opacity var(--transition-fast);
 }
 
 button:hover:enabled {
@@ -536,8 +557,9 @@ button.ghost {
 }
 
 button:disabled {
-  opacity: 0.5;
+  opacity: 0.4;
   cursor: not-allowed;
+  transform: none !important;
 }
 
 button:focus-visible {
@@ -634,6 +656,22 @@ textarea:focus-visible {
 .log-view {
   min-height: 150px;
   max-height: 260px;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.spinner {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border: 2px solid var(--border);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.6s linear infinite;
+  vertical-align: middle;
+  margin-right: 6px;
 }
 
 .runtime-grid {
