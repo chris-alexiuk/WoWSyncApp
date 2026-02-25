@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.3.1 (2026-02-25)
+
+### Fixes
+- Set BrowserWindow icon so the app displays the AzerSync icon in the taskbar and window title bar
+- Redesign status pills with color-coded variants (idle/syncing/running) and distinct source/client mode styles
+- Add animated dot indicator for active sync state
+
 ## 0.3.0 (2026-02-25)
 
 ### Refactoring

@@ -1,6 +1,6 @@
 {
   "name": "wow-sync-app",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "private": true,
   "description": "AzerSync desktop app for syncing WoW addons across machines",
   "author": {
