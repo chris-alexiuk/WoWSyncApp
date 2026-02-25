@@ -377,14 +377,63 @@ body {
 .status-pill {
   border-radius: 999px;
   border: 1px solid var(--border-strong);
-  background: var(--surface-soft);
-  color: #cde0ff;
-  padding: 5px 10px;
-  font-size: 0.84rem;
+  background: var(--surface-strong);
+  color: var(--text-muted);
+  padding: 6px 14px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
 }
 
-.status-pill--active {
+.status-pill--idle {
+  border-color: rgba(148, 176, 216, 0.18);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text-muted);
+}
+
+.status-pill--syncing {
+  border-color: rgba(99, 214, 191, 0.4);
+  background: rgba(99, 214, 191, 0.12);
+  color: var(--success);
   animation: sync-pulse 1.5s ease-in-out infinite;
+}
+
+.status-pill--running {
+  border-color: rgba(119, 166, 255, 0.4);
+  background: rgba(119, 166, 255, 0.12);
+  color: var(--info);
+}
+
+.status-pill--source {
+  border-color: rgba(99, 214, 191, 0.3);
+  background: rgba(99, 214, 191, 0.08);
+  color: #8eebd3;
+}
+
+.status-pill--client {
+  border-color: rgba(119, 166, 255, 0.3);
+  background: rgba(119, 166, 255, 0.08);
+  color: #a3c4ff;
+}
+
+.status-pill__dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: currentColor;
+  flex-shrink: 0;
+}
+
+.status-pill--syncing .status-pill__dot {
+  animation: dot-pulse 1s ease-in-out infinite;
+}
+
+@keyframes dot-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.4; transform: scale(0.7); }
 }
 
 .panel header {
