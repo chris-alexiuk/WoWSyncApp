@@ -93,10 +93,11 @@ export function SyncView({
 
       {mode === 'source' ? (
         <>
-          <label>
+          <label htmlFor="source-addons-path">
             Source AddOns Folder
             <div className="inline-field">
               <input
+                id="source-addons-path"
                 value={config.sourceAddonsPath}
                 onChange={(event) => onPatchConfig({ sourceAddonsPath: event.target.value })}
                 placeholder="/path/to/Interface/AddOns"
@@ -107,10 +108,11 @@ export function SyncView({
             </div>
           </label>
           {profileSyncEnabled ? (
-            <label>
+            <label htmlFor="source-profiles-path">
               Source Profile Folder
               <div className="inline-field">
                 <input
+                  id="source-profiles-path"
                   value={config.sourceProfilesPath}
                   onChange={(event) => onPatchConfig({ sourceProfilesPath: event.target.value })}
                   placeholder={
@@ -128,10 +130,11 @@ export function SyncView({
         </>
       ) : (
         <>
-          <label>
+          <label htmlFor="target-addons-path">
             Client AddOns Folder
             <div className="inline-field">
               <input
+                id="target-addons-path"
                 value={config.targetAddonsPath}
                 onChange={(event) => onPatchConfig({ targetAddonsPath: event.target.value })}
                 placeholder="/path/to/Interface/AddOns"
@@ -142,10 +145,11 @@ export function SyncView({
             </div>
           </label>
           {profileSyncEnabled ? (
-            <label>
+            <label htmlFor="target-profiles-path">
               Client Profile Folder
               <div className="inline-field">
                 <input
+                  id="target-profiles-path"
                   value={config.targetProfilesPath}
                   onChange={(event) => onPatchConfig({ targetProfilesPath: event.target.value })}
                   placeholder={
@@ -164,9 +168,10 @@ export function SyncView({
       )}
 
       <div className="grid two-up">
-        <label>
+        <label htmlFor="sync-interval">
           Sync Interval (seconds)
           <input
+            id="sync-interval"
             type="number"
             min={10}
             value={config.syncIntervalSeconds}
@@ -175,9 +180,10 @@ export function SyncView({
             }
           />
         </label>
-        <label>
+        <label htmlFor="machine-label">
           Machine Label
           <input
+            id="machine-label"
             value={config.machineLabel}
             onChange={(event) => onPatchConfig({ machineLabel: event.target.value })}
             placeholder="Raid-PC-Source"
