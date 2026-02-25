@@ -48,7 +48,7 @@ export function DashboardView(props: DashboardViewProps): JSX.Element {
             <p>{props.status}</p>
           </header>
           <div className="status-row">
-            <span className="status-pill">{syncStatus}</span>
+            <span className={`status-pill${props.state.inFlight ? ' status-pill--active' : ''}`}>{syncStatus}</span>
             <span className="status-pill">{modeLabel(props.mode)}</span>
           </div>
           <div className="actions actions--tight">
