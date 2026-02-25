@@ -83,7 +83,7 @@ export function PreflightPanel({
       )}
       <div className="actions actions--tight">
         <button type="button" onClick={onRunCheck} disabled={preflightBusy}>
-          {preflightBusy ? 'Checking...' : 'Run Checks Again'}
+          {preflightBusy ? <><span className="spinner" />Checking...</> : 'Run Checks Again'}
         </button>
       </div>
     </section>
