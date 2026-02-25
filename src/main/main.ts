@@ -42,6 +42,7 @@ async function createWindow(): Promise<void> {
     minWidth: 1100,
     minHeight: 720,
     backgroundColor: '#05070d',
+    icon: path.join(__dirname, '../../build/icon.png'),
     frame: !useCustomWindowChrome,
     titleBarStyle: useCustomWindowChrome ? 'hidden' : 'hiddenInset',
     autoHideMenuBar: true,

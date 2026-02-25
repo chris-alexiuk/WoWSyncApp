@@ -27,9 +27,19 @@ interface DashboardViewProps {
   onOpenReleasePage: () => void;
 }
 
-export function DashboardView(props: DashboardViewProps): JSX.Element {
-  const syncStatus = props.state.inFlight ? 'Syncing' : props.state.running ? 'Auto Sync On' : 'Idle';
+function syncStatusClass(state: SyncState): string {
+  if (state.inFlight) return 'status-pill status-pill--syncing';
+  if (state.running) return 'status-pill status-pill--running';
+  return 'status-pill status-pill--idle';
+}
 
+function syncStatusLabel(state: SyncState): string {
+  if (state.inFlight) return 'Syncing';
+  if (state.running) return 'Auto Sync On';
+  return 'Idle';
+}
+
+export function DashboardView(props: DashboardViewProps): JSX.Element {
   return (
     <>
       <PreflightPanel
@@ -48,8 +58,13 @@ export function DashboardView(props: DashboardViewProps): JSX.Element {
             <p>{props.status}</p>
           </header>
           <div className="status-row">
-            <span className={`status-pill${props.state.inFlight ? ' status-pill--active' : ''}`}>{syncStatus}</span>
-            <span className="status-pill">{modeLabel(props.mode)}</span>
+            <span className={syncStatusClass(props.state)}>
+              <span className="status-pill__dot" />
+              {syncStatusLabel(props.state)}
+            </span>
+            <span className={`status-pill status-pill--${props.mode}`}>
+              {props.mode === 'source' ? '\u2191' : '\u2193'} {modeLabel(props.mode)}
+            </span>
           </div>
           <div className="actions actions--tight">
             <button type="button" className="primary" onClick={props.onRunNow} disabled={!props.canSave || props.state.inFlight}>
