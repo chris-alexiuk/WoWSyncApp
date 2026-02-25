@@ -50,7 +50,7 @@ export function TitleBar({ isMaximized, onMinimize, onToggleMaximize, onClose }:
         </span>
         AzerSync
       </div>
-      <div className="window-chrome__controls">
+      <div className="window-chrome__controls" role="toolbar" aria-label="Window controls">
         <button type="button" className="window-btn" onClick={onMinimize} aria-label="Minimize window">
           -
         </button>
