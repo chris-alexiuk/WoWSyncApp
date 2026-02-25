@@ -28,7 +28,7 @@ export function LogViewer({ state }: LogViewerProps): JSX.Element {
       </div>
       <details className="activity-details">
         <summary>Show detailed log</summary>
-        <pre className="log-view">{state.logs.join('\n') || 'No logs yet'}</pre>
+        <pre className="log-view" role="log" aria-label="Sync activity log">{state.logs.join('\n') || 'No logs yet'}</pre>
       </details>
     </section>
   );

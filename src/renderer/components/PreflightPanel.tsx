@@ -49,7 +49,7 @@ export function PreflightPanel({
   onIssueAction,
 }: PreflightPanelProps): JSX.Element {
   return (
-    <section className="panel preflight-panel">
+    <section className="panel preflight-panel" aria-live="polite">
       <header>
         <h2>Startup Checks</h2>
         <p>
@@ -59,7 +59,7 @@ export function PreflightPanel({
         </p>
       </header>
       {preflight.issues.length === 0 ? (
-        <p className="preflight-ok">All checks passed.</p>
+        <p className="preflight-ok" role="status">All checks passed.</p>
       ) : (
         <ul className="preflight-list">
           {preflight.issues.map((issue) => (
